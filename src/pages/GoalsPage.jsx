@@ -105,7 +105,7 @@ export default function GoalsPage() {
                 const jsonString = `data:text/json;charset=utf-8,${encodeURIComponent(JSON.stringify(goals, null, 2))}`;
                 const downloadAnchor = document.createElement("a");
                 downloadAnchor.setAttribute("href", jsonString);
-                downloadAnchor.setAttribute("download", "ignos-goals.json");
+                downloadAnchor.setAttribute("download", "suru-goals.json");
                 document.body.appendChild(downloadAnchor);
                 downloadAnchor.click();
                 downloadAnchor.remove();
@@ -349,7 +349,7 @@ export default function GoalsPage() {
                   to="/projects"
                   className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-surface-container-lowest text-on-surface hover:text-primary transition-colors text-label-md font-label-md shadow-xs"
                 >
-                  <span className="w-2 h-2 rounded-full bg-primary"></span> Ignos Attendance SaaS
+                  <span className="w-2 h-2 rounded-full bg-primary"></span> Suru Attendance SaaS
                 </Link>
               </div>
             </div>

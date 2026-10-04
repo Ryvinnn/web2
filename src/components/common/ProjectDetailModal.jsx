@@ -306,7 +306,7 @@ export default function ProjectDetailModal() {
                           {t("projectDetailModal.repositoryLabel")}
                         </span>
                         <span className="font-body-sm text-body-sm font-semibold text-primary">
-                          ignos/{project.key || "core"}
+                          suru/{project.key || "core"}
                         </span>
                       </div>
                       <div className="p-2.5 rounded-lg bg-surface-container-lowest">

@@ -1,5 +1,5 @@
 /**
- * Time and Date utilities for Ignos Workspace
+ * Time and Date utilities for Suru Workspace
  * Uses device's local time and timezone (never hardcoding UTC or specific timezones)
  */
 

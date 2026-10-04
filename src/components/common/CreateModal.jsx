@@ -23,7 +23,7 @@ export default function CreateModal() {
   const fileInputRef = useRef(null);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [category, setCategory] = useState("Ignos Attendance SaaS");
+  const [category, setCategory] = useState("Suru Attendance SaaS");
   const [priority, setPriority] = useState("medium");
   const [deadline, setDeadline] = useState(() => formatLocalDateToISO(new Date()));
   const [coverImage, setCoverImage] = useState("");
@@ -97,7 +97,7 @@ export default function CreateModal() {
           ? "Architecture"
           : type === "goal"
           ? "career"
-          : projects[0]?.title || "Ignos Attendance SaaS"
+          : projects[0]?.title || "Suru Attendance SaaS"
       );
       setMilestonesList([
         { id: 1, title: "Requirement gathering & wireframing", completed: false },

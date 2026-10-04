@@ -13,7 +13,7 @@ export const initialGoals = [
     progress: 78,
     linkedProjects: [
       { id: "p1", name: "Personal Portfolio", color: "tertiary" },
-      { id: "p2", name: "Ignos Attendance SaaS", color: "primary" }
+      { id: "p2", name: "Suru Attendance SaaS", color: "primary" }
     ],
     milestones: [
       { id: "m1", title: "HTML & Semantic Structure", completed: true, date: "Aug 12" },
@@ -103,7 +103,7 @@ export const initialProjects = [
   {
     id: "p1",
     key: "ignos",
-    title: "Ignos Personal Management SaaS",
+    title: "Suru Personal Management SaaS",
     description: "Full-stack multi-user productivity platform with Laravel, Inertia, React, and Tailwind CSS.",
     category: "Web Engineering",
     linkedGoal: "Learn Fullstack Development",
@@ -224,7 +224,7 @@ export const initialTasks = [
     ticket: "IGN-188",
     title: "Selesaikan Autentikasi / Finish Auth flow with Laravel Breeze",
     description: "Integrate Sanctum tokens, session cookies, and handle multi-tenant subdomains fallback.",
-    project: "Ignos SaaS",
+    project: "Suru SaaS",
     projectId: "p1",
     goal: "Fullstack Dev",
     priority: "high",
@@ -246,7 +246,7 @@ export const initialTasks = [
     ticket: "IGN-175",
     title: "Revise Database Seeder for tenant isolation",
     description: "Prevent sample fake tenant accounts from bleeding into global user search queries.",
-    project: "Ignos Database",
+    project: "Suru Database",
     projectId: "p1",
     goal: "Infrastructure",
     priority: "medium",
@@ -279,7 +279,7 @@ export const initialTasks = [
     ticket: "IGN-202",
     title: "Implement summary metric cards in React",
     description: "Rendered KPI counter, weekly delta charts, and active shift indicators.",
-    project: "Ignos SaaS",
+    project: "Suru SaaS",
     projectId: "p1",
     goal: "Fullstack Dev",
     priority: "medium",
@@ -356,7 +356,7 @@ export const initialTasks = [
     ticket: "IGN-207",
     title: "Setup API route controller Laravel 11",
     description: "Generate resource controllers and register v1 API routes with auth:sanctum middleware.",
-    project: "Ignos SaaS",
+    project: "Suru SaaS",
     projectId: "p1",
     goal: "Fullstack Dev",
     priority: "high",
@@ -370,7 +370,7 @@ export const initialTasks = [
     ticket: "IGN-208",
     title: "Update tailwind theme tokens & contrast",
     description: "Refactor CSS variables and ensure WCAG AA color accessibility compliance.",
-    project: "Ignos SaaS",
+    project: "Suru SaaS",
     projectId: "p1",
     goal: "Fullstack Dev",
     priority: "medium",
@@ -425,7 +425,7 @@ export const initialTasks = [
   {
     id: "t-up-3",
     ticket: "IGN-212",
-    title: "Client verification walkthrough with Ignos Studio Team",
+    title: "Client verification walkthrough with Suru Studio Team",
     description: "Sprint demonstration of time tracking and milestone progress visualization.",
     project: "Sprint Review",
     projectId: "p1",

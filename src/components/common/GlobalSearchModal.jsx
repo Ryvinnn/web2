@@ -305,7 +305,7 @@ export default function GlobalSearchModal() {
             <span>↵ {language === "id" ? "Pilih" : "Select"}</span>
             <span>ESC {language === "id" ? "Tutup" : "Close"}</span>
           </div>
-          <span className="truncate">Ignos Spotlight Search</span>
+          <span className="truncate">Suru Spotlight Search</span>
         </div>
       </div>
     </div>

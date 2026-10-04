@@ -62,8 +62,8 @@ export default function AppSidebar() {
                 <span className="material-symbols-outlined text-[20px]">hub</span>
               </div>
               <div className="flex flex-col">
-                <span className="font-headline-sm text-headline-sm text-on-surface leading-tight">Ignos</span>
-                <span className="font-label-sm text-label-sm text-on-surface-variant leading-none">Workspace</span>
+                <span className="font-headline-sm text-headline-sm text-on-surface leading-tight">{t("common.appName") || "Suru"}</span>
+                <span className="font-label-sm text-label-sm text-on-surface-variant leading-none">{t("common.workspace") || "Workspace"}</span>
               </div>
             </div>
 

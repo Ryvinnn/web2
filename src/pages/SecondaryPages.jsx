@@ -331,7 +331,7 @@ export function CalendarPage() {
       map[authMigrationDay] = { title: "M4 Auth Migration Deadline", tag: "Milestone", color: "bg-secondary-container text-primary" };
     }
     if (!map[releaseDay]) {
-      map[releaseDay] = { title: "Ignos Core Engine Due", tag: "Release", color: "bg-primary-container text-on-primary" };
+      map[releaseDay] = { title: "Suru Core Engine Due", tag: "Release", color: "bg-primary-container text-on-primary" };
     }
     if (!map[portfolioReviewDay]) {
       map[portfolioReviewDay] = { title: "Portfolio V2 Review", tag: "Review", color: "bg-tertiary-container text-tertiary" };

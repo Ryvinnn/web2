@@ -60,7 +60,7 @@ export function WorkspaceProvider({ children }) {
     }
     return {
       name: "Laba",
-      email: "laba@ignos.workspace",
+      email: "laba@suru.workspace",
       role: "Admin User",
       initials: "LB"
     };
@@ -413,7 +413,7 @@ export function WorkspaceProvider({ children }) {
       ticket: `IGN-${Math.floor(215 + Math.random() * 50)}`,
       title: newTask.title,
       description: newTask.description || "",
-      project: newTask.project || "Ignos SaaS",
+      project: newTask.project || "Suru SaaS",
       projectId: newTask.projectId || "p1",
       goal: newTask.goal || "Fullstack Dev",
       priority: newTask.priority || "medium",

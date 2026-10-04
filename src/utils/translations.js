@@ -1,7 +1,7 @@
 export const translations = {
   id: {
     common: {
-      appName: "Ignos",
+      appName: "Suru",
       workspace: "Workspace",
       save: "Simpan",
       cancel: "Batal",
@@ -85,7 +85,7 @@ export const translations = {
       title: "Pengaturan",
       subtitle: "Kelola preferensi workspace, bahasa tampilan, dan konfigurasi profil Anda.",
       languageSection: "Bahasa & Tampilan Regional",
-      languageDesc: "Pilih bahasa yang akan digunakan pada seluruh antarmuka aplikasi Ignos Workspace.",
+      languageDesc: "Pilih bahasa yang akan digunakan pada seluruh antarmuka aplikasi Suru Workspace.",
       selectLanguage: "Pilih Bahasa",
       englishTitle: "English",
       englishSubtitle: "Bahasa Inggris (English US)",
@@ -96,7 +96,7 @@ export const translations = {
       activeBadge: "Aktif Digunakan",
       languageChangedToast: "Bahasa berhasil diubah ke Bahasa Indonesia!",
       profileSection: "Profil Pengguna",
-      profileDesc: "Profil administratif Anda di Ignos Workspace",
+      profileDesc: "Profil administratif Anda di Suru Workspace",
       displayName: "Nama Tampilan",
       role: "Peran / Hak Akses",
       themeSection: "Tema & Token Workspace",
@@ -348,7 +348,7 @@ export const translations = {
       allTab: "Semua Tugas",
       sortedByLabel: "Diurutkan berdasarkan: Tenggat & Urgensi",
       searchPlaceholder: "Filter tugas berdasarkan nama, tag, tiket...",
-      allProjectsOption: "Semua Proyek (Ignos SaaS, Mobile, Core)",
+      allProjectsOption: "Semua Proyek (Suru SaaS, Mobile, Core)",
       allGoalsOption: "Semua Target Induk",
       priorityAllOption: "Prioritas: Semua",
       overdueSectionTitle: "Terlambat (Memerlukan Perhatian Segera)",
@@ -523,7 +523,7 @@ export const translations = {
 
   en: {
     common: {
-      appName: "Ignos",
+      appName: "Suru",
       workspace: "Workspace",
       save: "Save",
       cancel: "Cancel",
@@ -607,7 +607,7 @@ export const translations = {
       title: "Settings",
       subtitle: "Manage workspace preferences, display language, and your profile configuration.",
       languageSection: "Language & Regional Display",
-      languageDesc: "Choose the display language used across the entire Ignos Workspace interface.",
+      languageDesc: "Choose the display language used across the entire Suru Workspace interface.",
       selectLanguage: "Select Language",
       englishTitle: "English",
       englishSubtitle: "English (US)",
@@ -618,7 +618,7 @@ export const translations = {
       activeBadge: "Currently Active",
       languageChangedToast: "Language successfully switched to English!",
       profileSection: "User Profile",
-      profileDesc: "Your administrative profile in Ignos Workspace",
+      profileDesc: "Your administrative profile in Suru Workspace",
       displayName: "Display Name",
       role: "Role / Permissions",
       themeSection: "Workspace Theme & Tokens",
@@ -870,7 +870,7 @@ export const translations = {
       allTab: "All Tasks",
       sortedByLabel: "Sorted by: Deadline & Urgency",
       searchPlaceholder: "Filter tasks by name, tag, ticket...",
-      allProjectsOption: "All Projects (Ignos SaaS, Mobile, Core)",
+      allProjectsOption: "All Projects (Suru SaaS, Mobile, Core)",
       allGoalsOption: "All Parent Goals",
       priorityAllOption: "Priority: All",
       overdueSectionTitle: "Overdue (Requires Immediate Attention)",

@@ -581,7 +581,7 @@ export default function ProjectsPage() {
             </div>
             <div className="flex items-center gap-2">
               <span className="flex items-center gap-1.5 font-label-sm text-label-sm text-on-surface-variant">
-                <span className="w-2.5 h-2.5 rounded-full bg-primary"></span> Ignos SaaS
+                <span className="w-2.5 h-2.5 rounded-full bg-primary"></span> Suru SaaS
               </span>
               <span className="flex items-center gap-1.5 font-label-sm text-label-sm text-on-surface-variant">
                 <span className="w-2.5 h-2.5 rounded-full bg-secondary"></span> Attendance App
@@ -642,7 +642,7 @@ export default function ProjectsPage() {
                     Multi-tenancy Auth Migration
                   </span>
                   <span className="font-label-sm text-label-sm text-on-surface-variant">
-                    Ignos SaaS • Due Sep 24
+                    Suru SaaS • Due Sep 24
                   </span>
                 </div>
                 <span className="px-2 py-0.5 rounded bg-surface-container text-primary font-label-sm text-label-sm font-semibold whitespace-nowrap">
