@@ -10,7 +10,9 @@ import {
 import { translations } from "../utils/translations";
 import {
   getTimePeriod,
-  formatLocalDateLong
+  formatLocalDateLong,
+  formatLocalDateToISO,
+  calculateStreak
 } from "../utils/dateTime";
 
 const WorkspaceContext = createContext(null);
@@ -271,6 +273,7 @@ export function WorkspaceProvider({ children }) {
   const toggleTask = (taskId) => {
     let affectedProjectId = null;
     let willBeCompleted = false;
+    const todayISO = formatLocalDateToISO(currentDate);
 
     setTasks((prev) =>
       prev.map((t) => {
@@ -281,6 +284,7 @@ export function WorkspaceProvider({ children }) {
           return {
             ...t,
             completed: nextCompleted,
+            completedAt: nextCompleted ? (t.completedAt || todayISO) : null,
             timeTag: nextCompleted ? (language === "id" ? "Baru Selesai" : "Completed Just Now") : t.timeTag
           };
         }
@@ -315,11 +319,17 @@ export function WorkspaceProvider({ children }) {
   };
 
   const toggleAllTasks = () => {
+    const todayISO = formatLocalDateToISO(currentDate);
     setTasks((prev) => {
       const allTodayChecked = prev.filter((t) => t.status === "today").every((t) => t.completed);
+      const nextCompleted = !allTodayChecked;
       return prev.map((t) => {
         if (t.status === "today") {
-          return { ...t, completed: !allTodayChecked };
+          return {
+            ...t,
+            completed: nextCompleted,
+            completedAt: nextCompleted ? todayISO : null
+          };
         }
         return t;
       });
@@ -328,6 +338,7 @@ export function WorkspaceProvider({ children }) {
   };
 
   const addTask = (newTask) => {
+    const todayISO = formatLocalDateToISO(currentDate);
     const item = {
       id: "t-" + Date.now(),
       ticket: `IGN-${Math.floor(215 + Math.random() * 50)}`,
@@ -339,7 +350,11 @@ export function WorkspaceProvider({ children }) {
       priority: newTask.priority || "medium",
       timeTag: newTask.timeTag || "Today",
       status: newTask.status || "today",
+      deadline: newTask.deadline || todayISO,
+      dueDate: newTask.dueDate || newTask.deadline || todayISO,
+      createdAt: todayISO,
       completed: false,
+      completedAt: null,
       tag: newTask.tag || "Baru",
       subtasks: newTask.subtasks || [],
       activityLog: [
@@ -358,9 +373,10 @@ export function WorkspaceProvider({ children }) {
     setActivityFeed((prev) => [
       {
         id: "act-" + Date.now(),
-        type: "Tugas Baru",
-        description: `Menambahkan tugas: "${newTask.title}"`,
+        type: language === "id" ? "Tugas Baru" : "New Task",
+        description: language === "id" ? `Menambahkan tugas: "${newTask.title}"` : `Added task: "${newTask.title}"`,
         time: language === "id" ? "Baru saja" : "Just now",
+        date: todayISO,
         color: "bg-primary"
       },
       ...prev
@@ -371,8 +387,18 @@ export function WorkspaceProvider({ children }) {
   };
 
   const updateTask = (taskId, updates) => {
+    const todayISO = formatLocalDateToISO(currentDate);
     setTasks((prev) =>
-      prev.map((t) => (t.id === taskId ? { ...t, ...updates } : t))
+      prev.map((t) => {
+        if (t.id === taskId) {
+          const merged = { ...t, ...updates };
+          if (updates.completed !== undefined) {
+            merged.completedAt = updates.completed ? (updates.completedAt || t.completedAt || todayISO) : null;
+          }
+          return merged;
+        }
+        return t;
+      })
     );
     showToast(language === "id" ? "✓ Tugas berhasil diperbarui!" : "✓ Task updated successfully!");
   };
@@ -673,6 +699,7 @@ export function WorkspaceProvider({ children }) {
   const overdueTasksCount = tasks.filter((t) => t.status === "overdue").length;
   const upcomingTasksCount = tasks.filter((t) => t.status === "upcoming").length;
   const completedTasksCount = tasks.filter((t) => t.completed).length;
+  const streakCount = calculateStreak(tasks, activityFeed, currentDate);
 
   const value = {
     language,
@@ -739,6 +766,7 @@ export function WorkspaceProvider({ children }) {
     overdueTasksCount,
     upcomingTasksCount,
     completedTasksCount,
+    streakCount,
     currentTime: currentDate,
     currentDate,
     timePeriod,

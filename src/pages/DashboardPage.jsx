@@ -1,6 +1,12 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useWorkspace } from "../context/WorkspaceContext";
+import {
+  getCurrentWeekDays,
+  getCurrentMonthIntervals,
+  getTaskPlannedDate,
+  getTaskCompletedDate
+} from "../utils/dateTime";
 
 export default function DashboardPage() {
   const navigate = useNavigate();
@@ -9,6 +15,7 @@ export default function DashboardPage() {
     projects,
     needsAttention,
     activityFeed,
+    tasks,
     toggleTask,
     toggleAllTasks,
     openModal,
@@ -18,12 +25,101 @@ export default function DashboardPage() {
     todayTasks,
     todayCompletedTasks,
     completionPercentage,
+    streakCount,
     language,
+    currentDate,
     t
   } = useWorkspace();
 
   const [period, setPeriod] = useState("weekly");
   const [dropdownOpen, setDropdownOpen] = useState(false);
+
+  // Calculate dynamic weekly and monthly activity data from actual tasks
+  const weeklyDays = useMemo(() => {
+    return getCurrentWeekDays(currentDate, language);
+  }, [currentDate, language]);
+
+  const weeklyChartData = useMemo(() => {
+    return weeklyDays.map((day) => {
+      const plannedForDay = tasks.filter(
+        (task) => getTaskPlannedDate(task, currentDate) === day.isoDate
+      );
+      const completedForDay = tasks.filter(
+        (task) => getTaskCompletedDate(task, currentDate) === day.isoDate
+      );
+
+      let plannedCount = plannedForDay.length;
+      let completedCount = completedForDay.length;
+
+      if (day.isToday) {
+        plannedCount = Math.max(todayTasks.length, plannedCount, todayCompletedTasks.length);
+        completedCount = todayCompletedTasks.length;
+      } else {
+        plannedCount = Math.max(plannedCount, completedCount);
+      }
+
+      return {
+        key: day.dayKey,
+        label: day.shortDay,
+        fullLabel: day.dayName,
+        isCurrent: day.isToday,
+        isoDate: day.isoDate,
+        plannedCount,
+        completedCount
+      };
+    });
+  }, [weeklyDays, tasks, currentDate, todayTasks.length, todayCompletedTasks.length]);
+
+  const monthlyIntervals = useMemo(() => {
+    return getCurrentMonthIntervals(currentDate, language);
+  }, [currentDate, language]);
+
+  const monthlyChartData = useMemo(() => {
+    return monthlyIntervals.map((interval) => {
+      const dateSet = new Set(interval.isoDates);
+
+      const plannedForInterval = tasks.filter((task) => {
+        const pDate = getTaskPlannedDate(task, currentDate);
+        return dateSet.has(pDate);
+      });
+
+      const completedForInterval = tasks.filter((task) => {
+        const cDate = getTaskCompletedDate(task, currentDate);
+        return dateSet.has(cDate);
+      });
+
+      let plannedCount = plannedForInterval.length;
+      let completedCount = completedForInterval.length;
+
+      plannedCount = Math.max(plannedCount, completedCount);
+
+      return {
+        key: `interval-${interval.index}`,
+        label: interval.label,
+        fullLabel: interval.fullLabel,
+        isCurrent: interval.isCurrentInterval,
+        plannedCount,
+        completedCount
+      };
+    });
+  }, [monthlyIntervals, tasks, currentDate]);
+
+  const activeChartData = period === "weekly" ? weeklyChartData : monthlyChartData;
+
+  const maxVal = useMemo(() => {
+    const max = Math.max(
+      ...activeChartData.map((d) => Math.max(d.plannedCount, d.completedCount)),
+      0
+    );
+    return max > 0 ? max : 1;
+  }, [activeChartData]);
+
+  const periodStats = useMemo(() => {
+    const totalPlanned = activeChartData.reduce((sum, d) => sum + d.plannedCount, 0);
+    const totalCompleted = activeChartData.reduce((sum, d) => sum + d.completedCount, 0);
+    const percentage = totalPlanned > 0 ? Math.round((totalCompleted / totalPlanned) * 100) : 0;
+    return { totalPlanned, totalCompleted, percentage };
+  }, [activeChartData]);
 
   // Quick add task
   const handleQuickAdd = () => {
@@ -314,7 +410,7 @@ export default function DashboardPage() {
             </span>
           </div>
           <div className="flex items-baseline gap-2 mb-space-xs">
-            <span className="font-display text-display text-on-surface leading-none">6</span>
+            <span className="font-display text-display text-on-surface leading-none">{streakCount ?? 0}</span>
             <span className="font-label-md text-label-md text-on-surface-variant">
               {t("dashboard.stats.daysInRow")}
             </span>
@@ -340,7 +436,7 @@ export default function DashboardPage() {
                     {t("dashboard.monitoring.title")}
                   </h2>
                   <span className="font-label-sm text-label-sm text-on-surface-variant">
-                    {t("dashboard.monitoring.subtitle")}
+                    {period === "monthly" ? t("dashboard.monitoring.subtitleMonthly") : t("dashboard.monitoring.subtitle")}
                   </span>
                 </div>
               </div>
@@ -383,97 +479,84 @@ export default function DashboardPage() {
                   </span>
                 </div>
                 <span className="font-label-sm text-label-sm text-tertiary bg-tertiary/10 px-2 py-0.5 rounded self-start sm:self-auto flex-shrink-0">
-                  {t("dashboard.monitoring.onTimeAvg")}
+                  {t("dashboard.monitoring.onTimeAvg", { percentage: periodStats.percentage })}
                 </span>
               </div>
 
               {/* Pure Inline Bar Chart matching Stitch screen */}
               <div className="h-56 w-full flex items-end justify-between gap-1 sm:gap-4 md:gap-6 pt-6 pb-2 px-2 sm:px-4 bg-surface-container-low rounded-xl">
-                {/* Mon */}
-                <div className="flex-1 flex flex-col items-center gap-2 group h-full justify-end min-w-0">
-                  <div className="font-label-sm text-label-sm text-on-surface-variant opacity-0 group-hover:opacity-100 transition-opacity">8/8</div>
-                  <div className="w-full max-w-[36px] flex gap-0.5 sm:gap-1 items-end h-40">
-                    <div className="w-1/2 bg-secondary-fixed rounded-t-sm h-[90%]"></div>
-                    <div className="w-1/2 bg-primary rounded-t-sm h-[90%] group-hover:bg-primary-container transition-colors"></div>
-                  </div>
-                  <span className="font-label-md text-label-md text-on-surface-variant group-hover:text-primary transition-colors truncate">
-                    {t("common.days.mon")}
-                  </span>
-                </div>
+                {activeChartData.map((item) => {
+                  const plannedHeight = item.plannedCount > 0
+                    ? Math.max(12, Math.round((item.plannedCount / maxVal) * 100))
+                    : 0;
+                  const completedHeight = item.completedCount > 0
+                    ? Math.max(12, Math.round((item.completedCount / maxVal) * 100))
+                    : 0;
 
-                {/* Tue */}
-                <div className="flex-1 flex flex-col items-center gap-2 group h-full justify-end min-w-0">
-                  <div className="font-label-sm text-label-sm text-on-surface-variant opacity-0 group-hover:opacity-100 transition-opacity">7/8</div>
-                  <div className="w-full max-w-[36px] flex gap-0.5 sm:gap-1 items-end h-40">
-                    <div className="w-1/2 bg-secondary-fixed rounded-t-sm h-[80%]"></div>
-                    <div className="w-1/2 bg-primary rounded-t-sm h-[70%] group-hover:bg-primary-container transition-colors"></div>
-                  </div>
-                  <span className="font-label-md text-label-md text-on-surface-variant group-hover:text-primary transition-colors truncate">
-                    {t("common.days.tue")}
-                  </span>
-                </div>
+                  return (
+                    <div
+                      key={item.key}
+                      className="flex-1 flex flex-col items-center gap-2 group h-full justify-end min-w-0"
+                    >
+                      {/* Top Indicator: Today / Current Badge or Hover Tooltip */}
+                      <div className="h-5 flex items-center justify-center">
+                        {item.isCurrent ? (
+                          <span
+                            title={`${item.completedCount}/${item.plannedCount}`}
+                            className="px-1 sm:px-1.5 py-0.5 rounded bg-primary text-on-primary text-[9px] sm:text-[10px] font-bold flex-shrink-0 cursor-default"
+                          >
+                            {period === "weekly" ? t("common.today") : t("dashboard.monitoring.thisWeek")}
+                          </span>
+                        ) : (
+                          <div className="font-label-sm text-label-sm text-on-surface-variant opacity-0 group-hover:opacity-100 transition-opacity truncate">
+                            {item.completedCount}/{item.plannedCount}
+                          </div>
+                        )}
+                      </div>
 
-                {/* Wed (Today) */}
-                <div className="flex-1 flex flex-col items-center gap-2 group h-full justify-end min-w-0">
-                  <span className="px-1 sm:px-1.5 py-0.5 rounded bg-primary text-on-primary text-[9px] sm:text-[10px] font-bold">
-                    {t("common.today")}
-                  </span>
-                  <div className="w-full max-w-[36px] flex gap-0.5 sm:gap-1 items-end h-40">
-                    <div className="w-1/2 bg-secondary-fixed rounded-t-sm h-[100%]"></div>
-                    <div className="w-1/2 bg-primary rounded-t-sm h-[45%] group-hover:bg-primary-container transition-colors"></div>
-                  </div>
-                  <span className="font-label-md text-label-md font-bold text-primary truncate">
-                    {t("common.days.wed")}
-                  </span>
-                </div>
+                      {/* 2-bar container matching Stitch styling */}
+                      <div
+                        title={`${item.fullLabel || item.label}: ${item.completedCount}/${item.plannedCount}`}
+                        className="w-full max-w-[36px] flex gap-0.5 sm:gap-1 items-end h-40"
+                      >
+                        {/* Planned Targets bar (bg-secondary-fixed) */}
+                        <div
+                          className={`w-1/2 rounded-t-sm transition-all duration-300 ${
+                            item.plannedCount > 0 ? "bg-secondary-fixed" : "bg-transparent"
+                          }`}
+                          style={{ height: `${plannedHeight}%` }}
+                        ></div>
 
-                {/* Thu */}
-                <div className="flex-1 flex flex-col items-center gap-2 group h-full justify-end min-w-0">
-                  <div className="font-label-sm text-label-sm text-on-surface-variant opacity-0 group-hover:opacity-100 transition-opacity">0/6</div>
-                  <div className="w-full max-w-[36px] flex gap-0.5 sm:gap-1 items-end h-40">
-                    <div className="w-1/2 bg-secondary-fixed rounded-t-sm h-[60%]"></div>
-                    <div className="w-1/2 bg-surface-container rounded-t-sm h-[5%]"></div>
-                  </div>
-                  <span className="font-label-md text-label-md text-on-surface-variant group-hover:text-primary transition-colors truncate">
-                    {t("common.days.thu")}
-                  </span>
-                </div>
+                        {/* Completed Tasks bar (bg-primary) */}
+                        <div
+                          className={`w-1/2 rounded-t-sm transition-all duration-300 ${
+                            item.completedCount > 0
+                              ? "bg-primary group-hover:bg-primary-container"
+                              : (item.plannedCount > 0 ? "bg-surface-container rounded-t-sm" : "bg-transparent")
+                          }`}
+                          style={{
+                            height: `${
+                              item.completedCount > 0
+                                ? completedHeight
+                                : (item.plannedCount > 0 ? 5 : 0)
+                            }%`
+                          }}
+                        ></div>
+                      </div>
 
-                {/* Fri */}
-                <div className="flex-1 flex flex-col items-center gap-2 group h-full justify-end min-w-0">
-                  <div className="font-label-sm text-label-sm text-on-surface-variant opacity-0 group-hover:opacity-100 transition-opacity">0/7</div>
-                  <div className="w-full max-w-[36px] flex gap-0.5 sm:gap-1 items-end h-40">
-                    <div className="w-1/2 bg-secondary-fixed rounded-t-sm h-[75%]"></div>
-                    <div className="w-1/2 bg-surface-container rounded-t-sm h-[5%]"></div>
-                  </div>
-                  <span className="font-label-md text-label-md text-on-surface-variant group-hover:text-primary transition-colors truncate">
-                    {t("common.days.fri")}
-                  </span>
-                </div>
-
-                {/* Sat */}
-                <div className="flex-1 flex flex-col items-center gap-2 group h-full justify-end min-w-0">
-                  <div className="font-label-sm text-label-sm text-on-surface-variant opacity-0 group-hover:opacity-100 transition-opacity">0/4</div>
-                  <div className="w-full max-w-[36px] flex gap-0.5 sm:gap-1 items-end h-40">
-                    <div className="w-1/2 bg-secondary-fixed rounded-t-sm h-[40%]"></div>
-                    <div className="w-1/2 bg-surface-container rounded-t-sm h-[5%]"></div>
-                  </div>
-                  <span className="font-label-md text-label-md text-on-surface-variant group-hover:text-primary transition-colors truncate">
-                    {t("common.days.sat")}
-                  </span>
-                </div>
-
-                {/* Sun */}
-                <div className="flex-1 flex flex-col items-center gap-2 group h-full justify-end min-w-0">
-                  <div className="font-label-sm text-label-sm text-on-surface-variant opacity-0 group-hover:opacity-100 transition-opacity">0/2</div>
-                  <div className="w-full max-w-[36px] flex gap-0.5 sm:gap-1 items-end h-40">
-                    <div className="w-1/2 bg-secondary-fixed rounded-t-sm h-[20%]"></div>
-                    <div className="w-1/2 bg-surface-container rounded-t-sm h-[5%]"></div>
-                  </div>
-                  <span className="font-label-md text-label-md text-on-surface-variant group-hover:text-primary transition-colors truncate">
-                    {t("common.days.sun")}
-                  </span>
-                </div>
+                      {/* Day / Period Label */}
+                      <span
+                        className={`font-label-md text-label-md transition-colors truncate ${
+                          item.isCurrent
+                            ? "font-bold text-primary"
+                            : "text-on-surface-variant group-hover:text-primary"
+                        }`}
+                      >
+                        {item.label}
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </div>

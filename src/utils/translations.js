@@ -185,11 +185,13 @@ export const translations = {
       monitoring: {
         title: "Monitoring Kehadiran & Task",
         subtitle: "Statistik pemenuhan target produktivitas mingguan",
+        subtitleMonthly: "Statistik pemenuhan target produktivitas bulanan",
         weekly: "Mingguan",
         monthly: "Bulanan",
         tasksCompleted: "Tugas Selesai",
         plannedTargets: "Target Terencana",
-        onTimeAvg: "Rata-rata 88.5% Tepat Waktu"
+        onTimeAvg: "Rata-rata {percentage}% Tepat Waktu",
+        thisWeek: "Pekan ini"
       },
       currentGoalsTitle: "Target Utama (Current Goals)",
       viewAllGoals: "Lihat semua target",
@@ -680,11 +682,13 @@ export const translations = {
       monitoring: {
         title: "Attendance & Task Monitoring",
         subtitle: "Weekly productivity target fulfillment statistics",
+        subtitleMonthly: "Monthly productivity target fulfillment statistics",
         weekly: "Weekly",
         monthly: "Monthly",
         tasksCompleted: "Tasks Completed",
         plannedTargets: "Planned Targets",
-        onTimeAvg: "Average 88.5% On-Time"
+        onTimeAvg: "Average {percentage}% On-Time",
+        thisWeek: "This Week"
       },
       currentGoalsTitle: "Strategic Goals (Current Goals)",
       viewAllGoals: "View all goals",
