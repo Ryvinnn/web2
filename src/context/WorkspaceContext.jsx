@@ -200,6 +200,8 @@ export function WorkspaceProvider({ children }) {
     });
   }, [projects, goals, tasks, currentDate, language, t]);
 
+  const setNeedsAttention = useCallback(() => {}, []);
+
   // Clean up any stale static mock data from localStorage
   useEffect(() => {
     try {
