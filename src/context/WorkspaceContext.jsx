@@ -651,7 +651,11 @@ export function WorkspaceProvider({ children }) {
               } else {
                 uncheckedMilestone = m;
               }
-              return { ...m, completed: nextVal };
+              return {
+                ...m,
+                completed: nextVal,
+                completedAt: nextVal ? formatLocalDateToISO(currentDate) : null
+              };
             }
             return m;
           });

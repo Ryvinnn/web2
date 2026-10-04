@@ -503,3 +503,209 @@ export function calculateStreak(tasks = [], activityFeed = [], referenceDate = n
   return calculateStreakMetrics(tasks, activityFeed, referenceDate).currentStreak;
 }
 
+const MONTH_INDEX_MAP = {
+  jan: 0, feb: 1, mar: 2, apr: 3, may: 4, mei: 4,
+  jun: 5, jul: 6, aug: 7, agu: 7, sep: 8, okt: 9, oct: 9,
+  nov: 10, dec: 11, des: 11
+};
+
+/**
+ * Safely parse milestone date string (ISO YYYY-MM-DD or Month Day string like "Aug 24")
+ *
+ * @param {string|Date|null|undefined} dateStr
+ * @param {number} [refYear=new Date().getFullYear()]
+ * @returns {Date|null}
+ */
+export function parseMilestoneDate(dateStr, refYear = new Date().getFullYear()) {
+  if (!dateStr) return null;
+  if (dateStr instanceof Date) return isNaN(dateStr.getTime()) ? null : dateStr;
+  if (typeof dateStr !== "string") return null;
+
+  const s = dateStr.trim();
+  if (!s) return null;
+
+  // ISO date YYYY-MM-DD
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
+    const [y, m, d] = s.split("-").map(Number);
+    return new Date(y, m - 1, d);
+  }
+
+  // Month + day, e.g. "Aug 12", "Sep 30", "12 Aug"
+  const wordMatch = s.match(/([a-zA-Z]+)\s*(\d{1,2})/) || s.match(/(\d{1,2})\s*([a-zA-Z]+)/);
+  if (wordMatch) {
+    let monthWord = "";
+    let dayNum = 0;
+    if (isNaN(Number(wordMatch[1]))) {
+      monthWord = wordMatch[1].toLowerCase().slice(0, 3);
+      dayNum = parseInt(wordMatch[2], 10);
+    } else {
+      monthWord = wordMatch[2].toLowerCase().slice(0, 3);
+      dayNum = parseInt(wordMatch[1], 10);
+    }
+    const mNum = MONTH_INDEX_MAP[monthWord];
+    if (mNum !== undefined && !isNaN(dayNum)) {
+      return new Date(refYear, mNum, dayNum);
+    }
+  }
+
+  const parsed = new Date(s);
+  return isNaN(parsed.getTime()) ? null : parsed;
+}
+
+/**
+ * Calculate ISO 8601 calendar week number for a given date
+ *
+ * @param {Date|string|number} [date=new Date()]
+ * @returns {number}
+ */
+export function getISOWeekNumber(date = new Date()) {
+  const d = date instanceof Date ? new Date(date) : new Date(date);
+  const safeDate = isNaN(d.getTime()) ? new Date() : d;
+  const utcDate = new Date(Date.UTC(safeDate.getFullYear(), safeDate.getMonth(), safeDate.getDate()));
+  const dayNum = utcDate.getUTCDay() || 7;
+  utcDate.setUTCDate(utcDate.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(utcDate.getUTCFullYear(), 0, 1));
+  return Math.ceil((((utcDate - yearStart) / 86400000) + 1) / 7);
+}
+
+/**
+ * Compute the 6-week milestone velocity trend data for Target & Goals page.
+ * Calculates 7 chronological intervals (6 past weeks + current week).
+ * Synchronized with user goals, milestone checkpoints, activityFeed, and local device time.
+ *
+ * @param {object} params
+ * @param {Array<object>} [params.goals=[]]
+ * @param {Array<object>} [params.activityFeed=[]]
+ * @param {Date|string|number} [params.referenceDate=new Date()]
+ * @param {"id"|"en"} [params.language="id"]
+ * @returns {object}
+ */
+export function computeMilestoneVelocityData({
+  goals = [],
+  activityFeed = [],
+  referenceDate = new Date(),
+  language = "id"
+} = {}) {
+  const ref = referenceDate instanceof Date ? referenceDate : new Date(referenceDate);
+  const safeDate = isNaN(ref.getTime()) ? new Date() : ref;
+  const refYear = safeDate.getFullYear();
+
+  // Find Monday of current week in local time
+  const day = safeDate.getDay(); // 0 is Sunday, 1 is Monday ... 6 is Saturday
+  const diffToMonday = (day + 6) % 7;
+  const currentMonday = new Date(safeDate.getFullYear(), safeDate.getMonth(), safeDate.getDate() - diffToMonday, 0, 0, 0, 0);
+
+  const xPositions = [20, 97, 173, 250, 327, 403, 480];
+  const weeks = [];
+
+  for (let offset = 6; offset >= 0; offset--) {
+    const start = new Date(currentMonday.getFullYear(), currentMonday.getMonth(), currentMonday.getDate() - offset * 7, 0, 0, 0, 0);
+    const end = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 6, 23, 59, 59, 999);
+    const weekNumber = getISOWeekNumber(start);
+    const isCurrent = offset === 0;
+
+    let label = "";
+    if (isCurrent) {
+      label = language === "id" ? `Saat ini (M${weekNumber})` : `Current (W${weekNumber})`;
+    } else {
+      label = language === "id" ? `Minggu ${weekNumber}` : `Week ${weekNumber}`;
+    }
+
+    weeks.push({
+      offset,
+      weekNumber,
+      startDate: start,
+      endDate: end,
+      startISO: formatLocalDateToISO(start),
+      endISO: formatLocalDateToISO(end),
+      isCurrent,
+      label,
+      count: 0,
+      completedMilestones: [],
+      x: xPositions[6 - offset]
+    });
+  }
+
+  // Iterate all goals and completed milestone checkpoints
+  if (Array.isArray(goals)) {
+    for (const goal of goals) {
+      if (Array.isArray(goal.milestones)) {
+        for (const m of goal.milestones) {
+          if (!m || (!m.completed && m.status !== "completed")) continue;
+
+          let resolvedDate = null;
+          if (m.completedAt) {
+            resolvedDate = parseMilestoneDate(m.completedAt, refYear);
+          }
+          if (!resolvedDate && Array.isArray(activityFeed)) {
+            const act = activityFeed.find(
+              (a) =>
+                (a.typeKey === "milestoneCompleted" ||
+                  a.type === "Milestone Tercapai" ||
+                  a.type === "Milestone Achieved") &&
+                a.itemTitle === m.title
+            );
+            if (act && act.date) {
+              resolvedDate = parseMilestoneDate(act.date, refYear);
+            }
+          }
+          if (!resolvedDate && m.date) {
+            resolvedDate = parseMilestoneDate(m.date, refYear);
+          }
+
+          // If milestone is completed, but resolved date is in the future compared to safeDate
+          // or has no explicit date, it was achieved by/during current week
+          if (!resolvedDate || resolvedDate > safeDate) {
+            resolvedDate = safeDate;
+          }
+
+          for (const w of weeks) {
+            if (resolvedDate >= w.startDate && resolvedDate <= w.endDate) {
+              w.count++;
+              w.completedMilestones.push({
+                id: m.id,
+                title: m.title,
+                goalId: goal.id,
+                goalTitle: goal.title
+              });
+              break;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // Calculate dynamic vertical scale: minimum 3 to maintain beautiful proportion when 0 or 1
+  const maxCount = Math.max(3, ...weeks.map((w) => w.count));
+
+  for (const w of weeks) {
+    w.y = Math.round(135 - (w.count / maxCount) * 110);
+    const unit = language === "id"
+      ? "milestone selesai"
+      : (w.count === 1 ? "milestone completed" : "milestones completed");
+    w.tooltip = `${w.label}: ${w.count} ${unit}`;
+  }
+
+  const polylinePoints = weeks.map((w) => `${w.x},${w.y}`).join(" ");
+  const polygonPoints = `${polylinePoints} 480,150 20,150`;
+  const currentWeekCount = weeks[6].count;
+
+  let badgeText = "";
+  if (currentWeekCount > 0) {
+    badgeText = `+${currentWeekCount} ${language === "id" ? "minggu ini" : "this week"}`;
+  } else {
+    badgeText = `0 ${language === "id" ? "minggu ini" : "this week"}`;
+  }
+
+  return {
+    weeks,
+    polylinePoints,
+    polygonPoints,
+    currentWeekCount,
+    badgeText,
+    maxCount
+  };
+}
+
+

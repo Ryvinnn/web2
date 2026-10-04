@@ -21,8 +21,8 @@ export const initialGoals = [
       { id: "m3", title: "JavaScript Deep Dive & Async", completed: true, date: "Sep 02" },
       { id: "m4", title: "React Component Composition", completed: true, date: "Sep 18" },
       { id: "m5", title: "Laravel 11 Backend & Eloquent ORM", completed: true, date: "Sep 30" },
-      { id: "m6", title: "Inertia.js Bridge & State Sync", completed: true, date: "Oct 06" },
-      { id: "m7", title: "Database Migrations & Multi-tenant", completed: true, date: "Oct 14" },
+      { id: "m6", title: "Inertia.js Bridge & State Sync", completed: true, date: "Oct 02" },
+      { id: "m7", title: "Database Migrations & Multi-tenant", completed: true, date: "Oct 04" },
       { id: "m8", title: "Production Deployment & CI/CD", completed: false, statusText: "Due Nov 15 • In Progress" },
       { id: "m9", title: "Real-time WebSockets & Push Notifications", completed: false, statusText: "Due Dec 20 • Planned" }
     ]

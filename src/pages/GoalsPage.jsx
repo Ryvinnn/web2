@@ -1,11 +1,24 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useWorkspace } from "../context/WorkspaceContext";
+import { computeMilestoneVelocityData } from "../utils/dateTime";
 
 export default function GoalsPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { goals, openModal, toggleMilestone, addGoalMilestone, deleteGoalMilestone, deleteGoal, showToast, language, t, currentDate } = useWorkspace();
+  const {
+    goals,
+    activityFeed,
+    openModal,
+    toggleMilestone,
+    addGoalMilestone,
+    deleteGoalMilestone,
+    deleteGoal,
+    showToast,
+    language,
+    t,
+    currentDate
+  } = useWorkspace();
 
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
@@ -107,6 +120,16 @@ export default function GoalsPage() {
       milestoneDonePercent
     };
   }, [goals, currentDate]);
+
+  // Dynamic 6-week milestone velocity trend data synchronized with user's goals & milestones
+  const velocityData = useMemo(() => {
+    return computeMilestoneVelocityData({
+      goals,
+      activityFeed,
+      referenceDate: currentDate,
+      language
+    });
+  }, [goals, activityFeed, currentDate, language]);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -768,7 +791,7 @@ export default function GoalsPage() {
               </p>
             </div>
             <span className="px-2.5 py-1 rounded-full bg-surface-container text-on-surface-variant font-label-sm text-label-sm">
-              {t("goals.thisWeekInc")}
+              {velocityData.badgeText}
             </span>
           </div>
 
@@ -784,25 +807,48 @@ export default function GoalsPage() {
                   <stop offset="100%" stopColor="#2563eb" stopOpacity="0.0"></stop>
                 </linearGradient>
               </defs>
-              <polygon fill="url(#velocityGrad)" points="20,130 90,110 170,95 250,115 340,60 420,40 480,25 480,150 20,150"></polygon>
-              <polyline fill="none" points="20,130 90,110 170,95 250,115 340,60 420,40 480,25" stroke="#2563eb" strokeLinecap="round" strokeLinejoin="round" strokeWidth="3"></polyline>
-              <circle className="fill-surface-container-lowest stroke-primary" cx="20" cy="130" r="4" strokeWidth="2.5"></circle>
-              <circle className="fill-surface-container-lowest stroke-primary" cx="90" cy="110" r="4" strokeWidth="2.5"></circle>
-              <circle className="fill-surface-container-lowest stroke-primary" cx="170" cy="95" r="4" strokeWidth="2.5"></circle>
-              <circle className="fill-surface-container-lowest stroke-primary" cx="250" cy="115" r="4" strokeWidth="2.5"></circle>
-              <circle className="fill-surface-container-lowest stroke-primary" cx="340" cy="60" r="4" strokeWidth="2.5"></circle>
-              <circle className="fill-surface-container-lowest stroke-primary" cx="420" cy="40" r="4" strokeWidth="2.5"></circle>
-              <circle className="fill-primary stroke-surface-container-lowest" cx="480" cy="25" r="5" strokeWidth="2"></circle>
+              <polygon
+                fill="url(#velocityGrad)"
+                points={velocityData.polygonPoints}
+                className="transition-all duration-300"
+              ></polygon>
+              <polyline
+                fill="none"
+                points={velocityData.polylinePoints}
+                stroke="#2563eb"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="3"
+                className="transition-all duration-300"
+              ></polyline>
+              {velocityData.weeks.map((p, idx) => (
+                <circle
+                  key={p.offset ?? idx}
+                  className={
+                    p.isCurrent
+                      ? "fill-primary stroke-surface-container-lowest transition-all duration-300 cursor-pointer"
+                      : "fill-surface-container-lowest stroke-primary transition-all duration-300 cursor-pointer"
+                  }
+                  cx={p.x}
+                  cy={p.y}
+                  r={p.isCurrent ? 5 : 4}
+                  strokeWidth={p.isCurrent ? 2 : 2.5}
+                >
+                  <title>{p.tooltip}</title>
+                </circle>
+              ))}
             </svg>
           </div>
           <div className="flex items-center justify-between text-label-sm font-label-sm text-on-surface-variant pt-2">
-            <span>{t("goals.weekPrefix")} 37</span>
-            <span>{t("goals.weekPrefix")} 38</span>
-            <span>{t("goals.weekPrefix")} 39</span>
-            <span>{t("goals.weekPrefix")} 40</span>
-            <span>{t("goals.weekPrefix")} 41</span>
-            <span>{t("goals.weekPrefix")} 42</span>
-            <span className="font-semibold text-primary">{t("goals.currentWeek")}</span>
+            {velocityData.weeks.map((w, idx) => (
+              <span
+                key={w.offset ?? idx}
+                className={w.isCurrent ? "font-semibold text-primary" : ""}
+                title={w.tooltip}
+              >
+                {w.label}
+              </span>
+            ))}
           </div>
         </div>
 
