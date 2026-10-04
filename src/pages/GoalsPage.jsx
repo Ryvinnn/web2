@@ -5,7 +5,7 @@ import { useWorkspace } from "../context/WorkspaceContext";
 export default function GoalsPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { goals, openModal, toggleMilestone, addGoalMilestone, deleteGoalMilestone, deleteGoal, showToast, language, t } = useWorkspace();
+  const { goals, openModal, toggleMilestone, addGoalMilestone, deleteGoalMilestone, deleteGoal, showToast, language, t, currentDate } = useWorkspace();
 
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
@@ -14,6 +14,99 @@ export default function GoalsPage() {
   const [selectedGoalId, setSelectedGoalId] = useState(goals[0]?.id || "g1");
   const [newStepTitle, setNewStepTitle] = useState("");
   const [addingStep, setAddingStep] = useState(false);
+
+  // Helper for flexible date parsing
+  const parseAnyDate = (dateVal) => {
+    if (!dateVal) return null;
+    if (dateVal instanceof Date) return isNaN(dateVal.getTime()) ? null : dateVal;
+    const str = String(dateVal).trim();
+    if (/^\d{4}-\d{2}-\d{2}/.test(str)) {
+      const [y, m, d] = str.slice(0, 10).split("-").map(Number);
+      return new Date(y, m - 1, d);
+    }
+    const parsed = new Date(str);
+    return isNaN(parsed.getTime()) ? null : parsed;
+  };
+
+  // Synchronized dynamic metrics derived directly from user's live goals and milestones
+  const stats = useMemo(() => {
+    const totalGoalsCount = goals.length;
+    const now = currentDate instanceof Date ? currentDate : new Date();
+    const curYear = now.getFullYear();
+    const curMonth = now.getMonth();
+
+    // 1. Total Goals Card: goals added or due in current month
+    const goalsThisMonth = goals.filter((g) => {
+      const d = parseAnyDate(g.createdAt) || parseAnyDate(g.deadline);
+      return d && d.getFullYear() === curYear && d.getMonth() === curMonth;
+    }).length;
+
+    // 2. Active / In-Progress Goals Card
+    const inProgressGoals = goals.filter(
+      (g) => g.status === "in_progress" || (g.status !== "completed" && (Number(g.progress) || 0) < 100)
+    );
+    const inProgressCount = inProgressGoals.length;
+    const inProgressPercent = totalGoalsCount > 0 ? Math.round((inProgressCount / totalGoalsCount) * 100) : 0;
+
+    // 3. Completed Goals Card
+    const completedGoals = goals.filter(
+      (g) => g.status === "completed" || (Number(g.progress) || 0) === 100
+    );
+    const completedCount = completedGoals.length;
+
+    const completedThisYear = completedGoals.filter((g) => {
+      const d = parseAnyDate(g.completedAt) || parseAnyDate(g.deadline);
+      return d && d.getFullYear() === curYear;
+    }).length;
+
+    // On-schedule rate among completed goals (or overall on-schedule if completed)
+    const onScheduleCompletedCount = completedGoals.filter((g) => {
+      const d = parseAnyDate(g.deadline);
+      if (!d) return true;
+      const compDate = parseAnyDate(g.completedAt) || now;
+      return compDate.getTime() <= d.getTime() + 86400000;
+    }).length;
+
+    const onSchedulePercent = completedCount > 0
+      ? Math.round((onScheduleCompletedCount / completedCount) * 100)
+      : (totalGoalsCount > 0 ? 100 : 0);
+
+    // 4. Milestones Aggregate Card
+    let totalMilestones = 0;
+    let completedMilestones = 0;
+
+    goals.forEach((g) => {
+      if (Array.isArray(g.milestones) && g.milestones.length > 0) {
+        totalMilestones += g.milestones.length;
+        completedMilestones += g.milestones.filter((m) => m.completed).length;
+      } else if (g.totalCount !== undefined && g.totalCount > 0) {
+        totalMilestones += Number(g.totalCount) || 0;
+        completedMilestones += Number(g.doneCount) || 0;
+      } else if ((Number(g.progress) || 0) > 0) {
+        totalMilestones += 1;
+        if ((Number(g.progress) || 0) === 100) {
+          completedMilestones += 1;
+        }
+      }
+    });
+
+    const milestoneDonePercent = totalMilestones > 0
+      ? Math.round((completedMilestones / totalMilestones) * 100)
+      : 0;
+
+    return {
+      totalGoalsCount,
+      goalsThisMonth,
+      inProgressCount,
+      inProgressPercent,
+      completedCount,
+      completedThisYear,
+      onSchedulePercent,
+      totalMilestones,
+      completedMilestones,
+      milestoneDonePercent
+    };
+  }, [goals, currentDate]);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -138,14 +231,26 @@ export default function GoalsPage() {
               </div>
             </div>
             <div className="mt-space-md flex items-baseline gap-space-sm">
-              <span className="text-display font-display text-on-surface">{goals.length}</span>
-              <span className="text-label-sm font-label-sm text-tertiary font-semibold flex items-center">
-                <span className="material-symbols-outlined text-[14px]">arrow_upward</span> {t("goals.monthInc")}
-              </span>
+              <span className="text-display font-display text-on-surface">{stats.totalGoalsCount}</span>
+              {stats.goalsThisMonth > 0 ? (
+                <span className="text-label-sm font-label-sm text-tertiary font-semibold flex items-center">
+                  <span className="material-symbols-outlined text-[14px]">arrow_upward</span> {t("goals.monthInc", { count: stats.goalsThisMonth })}
+                </span>
+              ) : (
+                <span className="text-label-sm font-label-sm text-on-surface-variant font-medium">
+                  {t("goals.monthIncZero")}
+                </span>
+              )}
             </div>
             <div className="mt-space-sm flex items-center gap-1.5 text-body-sm font-body-sm text-on-surface-variant">
-              <span className="w-2 h-2 rounded-full bg-primary"></span>
-              <span>{t("goals.activeRoadmap")}</span>
+              <span className={`w-2 h-2 rounded-full ${stats.inProgressCount > 0 ? "bg-primary" : "bg-outline-variant"}`}></span>
+              <span>
+                {stats.inProgressCount === 0
+                  ? t("goals.noActiveRoadmap")
+                  : stats.inProgressCount === 1
+                  ? t("goals.activeRoadmapSingle")
+                  : t("goals.activeRoadmap", { count: stats.inProgressCount })}
+              </span>
             </div>
           </div>
 
@@ -158,11 +263,16 @@ export default function GoalsPage() {
               </div>
             </div>
             <div className="mt-space-md flex items-baseline gap-space-sm">
-              <span className="text-display font-display text-on-surface">3</span>
-              <span className="text-label-sm font-label-sm text-on-surface-variant">{t("goals.fleetPercent")}</span>
+              <span className="text-display font-display text-on-surface">{stats.inProgressCount}</span>
+              <span className="text-label-sm font-label-sm text-on-surface-variant">
+                {t("goals.fleetPercent", { percent: stats.inProgressPercent })}
+              </span>
             </div>
             <div className="mt-space-sm w-full bg-surface-container rounded-full h-1.5 overflow-hidden">
-              <div className="bg-primary h-1.5 rounded-full" style={{ width: "60%" }}></div>
+              <div
+                className="bg-primary h-1.5 rounded-full transition-all duration-500"
+                style={{ width: `${stats.inProgressPercent}%` }}
+              ></div>
             </div>
           </div>
 
@@ -175,14 +285,24 @@ export default function GoalsPage() {
               </div>
             </div>
             <div className="mt-space-md flex items-baseline gap-space-sm">
-              <span className="text-display font-display text-on-surface">2</span>
-              <span className="text-label-sm font-label-sm text-tertiary font-semibold flex items-center">
-                <span className="material-symbols-outlined text-[14px]">check</span> {t("goals.onSchedulePercent")}
-              </span>
+              <span className="text-display font-display text-on-surface">{stats.completedCount}</span>
+              {stats.completedCount > 0 ? (
+                <span className="text-label-sm font-label-sm text-tertiary font-semibold flex items-center">
+                  <span className="material-symbols-outlined text-[14px]">check</span> {t("goals.onSchedulePercent", { percent: stats.onSchedulePercent })}
+                </span>
+              ) : (
+                <span className="text-label-sm font-label-sm text-on-surface-variant font-medium">
+                  {t("goals.achievedPercentZero")}
+                </span>
+              )}
             </div>
             <div className="mt-space-sm flex items-center gap-1.5 text-body-sm font-body-sm text-on-surface-variant">
-              <span className="w-2 h-2 rounded-full bg-tertiary"></span>
-              <span>{t("goals.achievedYear")}</span>
+              <span className={`w-2 h-2 rounded-full ${stats.completedCount > 0 ? "bg-tertiary" : "bg-outline-variant"}`}></span>
+              <span>
+                {stats.completedCount > 0
+                  ? t("goals.achievedYear", { count: stats.completedThisYear })
+                  : t("goals.noAchievedYear")}
+              </span>
             </div>
           </div>
 
@@ -196,15 +316,18 @@ export default function GoalsPage() {
             </div>
             <div className="mt-space-md flex items-baseline justify-between">
               <div className="flex items-baseline gap-space-xs">
-                <span className="text-display font-display text-on-surface">31</span>
-                <span className="text-body-md font-body-md text-on-surface-variant">/ 42</span>
+                <span className="text-display font-display text-on-surface">{stats.completedMilestones}</span>
+                <span className="text-body-md font-body-md text-on-surface-variant">/ {stats.totalMilestones}</span>
               </div>
               <span className="text-label-md font-label-md px-2 py-0.5 rounded-full bg-secondary-container text-on-secondary-container font-semibold">
-                74% {t("goals.donePercent")}
+                {stats.milestoneDonePercent}% {t("goals.donePercent")}
               </span>
             </div>
             <div className="mt-space-sm w-full bg-surface-container rounded-full h-1.5 overflow-hidden">
-              <div className="bg-tertiary h-1.5 rounded-full" style={{ width: "74%" }}></div>
+              <div
+                className="bg-tertiary h-1.5 rounded-full transition-all duration-500"
+                style={{ width: `${stats.milestoneDonePercent}%` }}
+              ></div>
             </div>
           </div>
         </div>
@@ -487,9 +610,10 @@ export default function GoalsPage() {
         )}
 
         {/* RIGHT COLUMN (4 cols): Goal Cards */}
-        <div className="lg:col-span-4 relative min-h-0 lg:h-full">
-          <div className="lg:absolute lg:inset-0 lg:overflow-y-auto custom-scrollbar flex flex-col gap-space-lg pr-2 pl-0.5 py-1">
-            {sideGoals.map((g) => (
+        {heroGoal && sideGoals.length > 0 && (
+          <div className="lg:col-span-4 relative min-h-0 lg:h-full">
+            <div className="lg:absolute lg:inset-0 lg:overflow-y-auto custom-scrollbar flex flex-col gap-space-lg pr-2 pl-0.5 py-1">
+              {sideGoals.map((g) => (
               <div
                 key={g.id}
                 onClick={() => setSelectedGoalId(g.id)}
@@ -601,12 +725,23 @@ export default function GoalsPage() {
             ))}
           </div>
         </div>
+        )}
         {filteredGoals.length === 0 && (
           <div className="lg:col-span-12 bg-surface-container-lowest rounded-xl p-space-2xl shadow-sm flex flex-col items-center justify-center text-center">
             <span className="material-symbols-outlined text-[40px] text-on-surface-variant mb-2">flag</span>
-            <h4 className="font-headline-sm text-headline-sm text-on-surface">{t("common.noData")}</h4>
+            <h4 className="font-headline-sm text-headline-sm text-on-surface">
+              {goals.length === 0
+                ? (language === "id" ? "Belum Ada Target" : "No Goals Yet")
+                : t("common.noData")}
+            </h4>
             <p className="text-body-sm text-on-surface-variant mt-1 mb-space-md">
-              {language === "id" ? "Tidak ada target yang sesuai dengan filter." : "No goals match the selected filter."}
+              {goals.length === 0
+                ? (language === "id"
+                    ? "Buat target strategis pertama Anda untuk mulai melacak pencapaian dan milestone."
+                    : "Create your first strategic goal to start tracking achievements and milestones.")
+                : (language === "id"
+                    ? "Tidak ada target yang sesuai dengan filter."
+                    : "No goals match the selected filter.")}
             </p>
             <button
               type="button"
