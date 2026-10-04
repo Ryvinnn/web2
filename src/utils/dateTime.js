@@ -388,14 +388,14 @@ export function getTaskCompletedDate(task, referenceDate = new Date()) {
 }
 
 /**
- * Calculate user's consecutive day activity streak from tasks and activity feed.
+ * Calculate user's consecutive day activity streak (current and best) from tasks and activity feed.
  *
  * @param {Array<object>} tasks
  * @param {Array<object>} activityFeed
  * @param {Date} [referenceDate=new Date()]
- * @returns {number}
+ * @returns {{ currentStreak: number, bestStreak: number }}
  */
-export function calculateStreak(tasks = [], activityFeed = [], referenceDate = new Date()) {
+export function calculateStreakMetrics(tasks = [], activityFeed = [], referenceDate = new Date()) {
   const ref = referenceDate instanceof Date ? referenceDate : new Date(referenceDate);
   const todayISO = formatLocalDateToISO(ref);
 
@@ -404,9 +404,11 @@ export function calculateStreak(tasks = [], activityFeed = [], referenceDate = n
 
   // Completed tasks
   for (const t of tasks) {
-    const cDate = getTaskCompletedDate(t, ref);
-    if (cDate) {
-      activeDates.add(cDate);
+    if (t.completed) {
+      const cDate = getTaskCompletedDate(t, ref);
+      if (cDate) {
+        activeDates.add(cDate);
+      }
     }
   }
 
@@ -414,31 +416,90 @@ export function calculateStreak(tasks = [], activityFeed = [], referenceDate = n
   for (const act of activityFeed) {
     if (act.date && /^\d{4}-\d{2}-\d{2}$/.test(act.date)) {
       activeDates.add(act.date);
-    } else if (act.time && (act.time.toLowerCase().includes("hari ini") || act.time.toLowerCase().includes("today") || act.time.toLowerCase().includes("just now") || act.time.toLowerCase().includes("baru saja"))) {
-      activeDates.add(todayISO);
+    } else if (act.time) {
+      const lower = String(act.time).toLowerCase();
+      if (
+        lower.includes("hari ini") ||
+        lower.includes("today") ||
+        lower.includes("just now") ||
+        lower.includes("baru saja") ||
+        /^\d{2}:\d{2}/.test(lower) ||
+        lower.includes("jam yang lalu") ||
+        lower.includes("hour") ||
+        lower.includes("menit yang lalu") ||
+        lower.includes("min")
+      ) {
+        activeDates.add(todayISO);
+      }
     }
   }
 
-  if (activeDates.size === 0) return 0;
+  if (activeDates.size === 0) {
+    return { currentStreak: 0, bestStreak: 0 };
+  }
 
-  // Check if today has activity
-  let streak = 0;
+  // Current streak
+  let currentStreak = 0;
   let checkDate = new Date(ref.getFullYear(), ref.getMonth(), ref.getDate());
 
   if (activeDates.has(todayISO)) {
     // Current streak includes today
     while (activeDates.has(formatLocalDateToISO(checkDate))) {
-      streak++;
+      currentStreak++;
       checkDate.setDate(checkDate.getDate() - 1);
     }
   } else {
-    // Check if streak was active as of yesterday
+    // Streak active as of yesterday
     checkDate.setDate(checkDate.getDate() - 1);
     while (activeDates.has(formatLocalDateToISO(checkDate))) {
-      streak++;
+      currentStreak++;
       checkDate.setDate(checkDate.getDate() - 1);
     }
   }
 
-  return streak;
+  // Best streak from historical active dates
+  const sortedDates = Array.from(activeDates).sort();
+  let bestStreak = 0;
+  let runningStreak = 0;
+  let prevDate = null;
+
+  for (const dStr of sortedDates) {
+    const parts = dStr.split("-").map(Number);
+    const curDate = new Date(parts[0], parts[1] - 1, parts[2]);
+
+    if (!prevDate) {
+      runningStreak = 1;
+    } else {
+      const diffMs = curDate.getTime() - prevDate.getTime();
+      const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+      if (diffDays === 1) {
+        runningStreak++;
+      } else if (diffDays > 1) {
+        runningStreak = 1;
+      }
+    }
+
+    if (runningStreak > bestStreak) {
+      bestStreak = runningStreak;
+    }
+    prevDate = curDate;
+  }
+
+  bestStreak = Math.max(bestStreak, currentStreak);
+
+  return { currentStreak, bestStreak };
 }
+
+/**
+ * Calculate user's consecutive day activity streak from tasks and activity feed.
+ * Backward-compatible helper.
+ *
+ * @param {Array<object>} tasks
+ * @param {Array<object>} activityFeed
+ * @param {Date} [referenceDate=new Date()]
+ * @returns {number}
+ */
+export function calculateStreak(tasks = [], activityFeed = [], referenceDate = new Date()) {
+  return calculateStreakMetrics(tasks, activityFeed, referenceDate).currentStreak;
+}
+

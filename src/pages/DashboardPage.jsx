@@ -5,8 +5,11 @@ import {
   getCurrentWeekDays,
   getCurrentMonthIntervals,
   getTaskPlannedDate,
-  getTaskCompletedDate
+  getTaskCompletedDate,
+  formatLocalDateToISO,
+  calculateStreakMetrics
 } from "../utils/dateTime";
+import { parseAnyDate } from "../utils/attention";
 
 export default function DashboardPage() {
   const navigate = useNavigate();
@@ -21,12 +24,8 @@ export default function DashboardPage() {
     openModal,
     openProjectModal,
     setSelectedTaskId,
-    activeGoalsCount,
-    activeProjectsCount,
     todayTasks,
     todayCompletedTasks,
-    completionPercentage,
-    streakCount,
     language,
     currentDate,
     t
@@ -35,6 +34,145 @@ export default function DashboardPage() {
   const [period, setPeriod] = useState("weekly");
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [showAllAttention, setShowAllAttention] = useState(false);
+
+  // Dynamic summary metrics calculated strictly from actual user data
+  const summaryMetrics = useMemo(() => {
+    const todayISO = formatLocalDateToISO(currentDate);
+    const curYear = currentDate.getFullYear();
+    const curMonth = currentDate.getMonth();
+    const todayMidnight = new Date(curYear, curMonth, currentDate.getDate());
+
+    // 1. Target Aktif
+    const activeGoals = goals.filter(
+      (g) => g.status === "in_progress" || (g.status !== "completed" && (g.progress || 0) < 100)
+    );
+    const calculatedActiveGoalsCount = activeGoals.length;
+    const goalsDueThisMonth = activeGoals.filter((g) => {
+      const d = parseAnyDate(g.deadline);
+      if (!d) return false;
+      return d.getFullYear() === curYear && d.getMonth() === curMonth;
+    }).length;
+
+    let avgGoalProgressText = "";
+    if (calculatedActiveGoalsCount > 0) {
+      const sumProgress = activeGoals.reduce((sum, g) => sum + (Number(g.progress) || 0), 0);
+      const avg = Math.round(sumProgress / calculatedActiveGoalsCount);
+      avgGoalProgressText = t("dashboard.stats.avgProgress", { percent: avg });
+    } else if (goals.length > 0 && calculatedActiveGoalsCount === 0) {
+      avgGoalProgressText = t("dashboard.stats.allGoalsDone");
+    } else {
+      avgGoalProgressText = t("dashboard.stats.noAvgProgress");
+    }
+
+    // 2. Proyek Berjalan
+    const activeProjects = projects.filter(
+      (p) => p.status === "in-progress" || (p.status !== "completed" && (p.progress || 0) < 100)
+    );
+    const calculatedActiveProjectsCount = activeProjects.length;
+
+    const criticalProjectDeadlines = activeProjects.filter((p) => {
+      const d = parseAnyDate(p.deadline);
+      if (!d) return false;
+      const diffDays = Math.ceil((d.getTime() - todayMidnight.getTime()) / (1000 * 60 * 60 * 24));
+      return diffDays <= 3;
+    }).length;
+
+    const projectTotalTasks = projects.reduce((sum, p) => {
+      const linked = tasks.filter((t) => t.projectId === p.id || t.project === p.title || t.project === p.key);
+      const count = linked.length > 0 ? Math.max(linked.length, p.totalTasks || 0) : (p.totalTasks || 0);
+      return sum + count;
+    }, 0);
+
+    // 3. Tugas Hari Ini
+    const actualTodayTasks = tasks.filter(
+      (t) => t.status === "today" || getTaskPlannedDate(t, currentDate) === todayISO
+    );
+    const todayCompletedCount = actualTodayTasks.filter((t) => t.completed).length;
+    const todayTotalCount = actualTodayTasks.length;
+    const todayPendingCount = Math.max(0, todayTotalCount - todayCompletedCount);
+    const todayPercent = todayTotalCount > 0 ? Math.round((todayCompletedCount / todayTotalCount) * 100) : 0;
+
+    // 4. Rasio Penyelesaian (Pekan Ini vs Pekan Lalu)
+    const weekDays = getCurrentWeekDays(currentDate, language);
+    const thisWeekISODates = new Set(weekDays.map((d) => d.isoDate));
+    const plannedThisWeek = tasks.filter((t) => {
+      const pDate = getTaskPlannedDate(t, currentDate);
+      return pDate && thisWeekISODates.has(pDate);
+    });
+    const completedThisWeek = tasks.filter((t) => {
+      const cDate = getTaskCompletedDate(t, currentDate);
+      return cDate && thisWeekISODates.has(cDate);
+    });
+
+    let thisWeekPlannedCount = plannedThisWeek.length;
+    let thisWeekCompletedCount = completedThisWeek.length;
+    thisWeekPlannedCount = Math.max(thisWeekPlannedCount, thisWeekCompletedCount);
+
+    if (thisWeekPlannedCount === 0 && actualTodayTasks.length > 0) {
+      thisWeekPlannedCount = actualTodayTasks.length;
+      thisWeekCompletedCount = todayCompletedCount;
+    }
+
+    let completionRate = 0;
+    if (thisWeekPlannedCount > 0) {
+      completionRate = Math.round((thisWeekCompletedCount / thisWeekPlannedCount) * 100);
+    } else if (tasks.length > 0) {
+      const allCompleted = tasks.filter((t) => t.completed).length;
+      completionRate = Math.round((allCompleted / tasks.length) * 100);
+    }
+
+    // Historical comparison: previous week
+    const prevWeekRef = new Date(curYear, curMonth, currentDate.getDate() - 7);
+    const prevWeekDays = getCurrentWeekDays(prevWeekRef, language);
+    const prevWeekISODates = new Set(prevWeekDays.map((d) => d.isoDate));
+    const plannedLastWeek = tasks.filter((t) => {
+      const pDate = getTaskPlannedDate(t, currentDate);
+      return pDate && prevWeekISODates.has(pDate);
+    });
+    const completedLastWeek = tasks.filter((t) => {
+      const cDate = getTaskCompletedDate(t, currentDate);
+      return cDate && prevWeekISODates.has(cDate);
+    });
+
+    let lastWeekPlannedCount = plannedLastWeek.length;
+    let lastWeekCompletedCount = completedLastWeek.length;
+    lastWeekPlannedCount = Math.max(lastWeekPlannedCount, lastWeekCompletedCount);
+
+    const hasComparison = lastWeekPlannedCount > 0;
+    let lastWeekRate = 0;
+    let rateDelta = 0;
+    if (hasComparison) {
+      lastWeekRate = Math.round((lastWeekCompletedCount / lastWeekPlannedCount) * 100);
+      rateDelta = completionRate - lastWeekRate;
+    }
+
+    // 5. Streak Aktif
+    const { currentStreak: calcStreak, bestStreak: calcBestStreak } = calculateStreakMetrics(
+      tasks,
+      activityFeed,
+      currentDate
+    );
+
+    return {
+      activeGoalsCount: calculatedActiveGoalsCount,
+      goalsDueThisMonth,
+      avgGoalProgressText,
+      activeProjectsCount: calculatedActiveProjectsCount,
+      criticalProjectDeadlines,
+      projectTotalTasks,
+      todayCompletedCount,
+      todayTotalCount,
+      todayPendingCount,
+      todayPercent,
+      completionRate,
+      hasComparison,
+      lastWeekRate,
+      rateDelta,
+      currentStreak: calcStreak,
+      bestStreak: calcBestStreak
+    };
+  }, [goals, projects, tasks, activityFeed, currentDate, language, t]);
+
 
   // Calculate dynamic weekly and monthly activity data from actual tasks
   const weeklyDays = useMemo(() => {
@@ -310,16 +448,16 @@ export default function DashboardPage() {
             </span>
           </div>
           <div className="flex items-baseline gap-2 mb-space-xs">
-            <span className="font-display text-display text-on-surface leading-none">{activeGoalsCount}</span>
+            <span className="font-display text-display text-on-surface leading-none">{summaryMetrics.activeGoalsCount}</span>
             <span className="font-label-md text-label-md text-on-surface-variant">
               {t("dashboard.stats.goalsLabel")}
             </span>
           </div>
           <div className="flex items-center justify-between pt-space-xs text-on-surface-variant font-label-sm text-label-sm flex-wrap gap-1 text-[10px] sm:text-label-sm">
             <span className="inline-flex items-center gap-1 text-primary">
-              <span className="material-symbols-outlined text-[14px]">event</span> {t("dashboard.stats.dueThisMonth")}
+              <span className="material-symbols-outlined text-[14px]">event</span> {t("dashboard.stats.dueThisMonth", { count: summaryMetrics.goalsDueThisMonth })}
             </span>
-            <span className="text-tertiary font-medium">{t("dashboard.stats.avgProgress")}</span>
+            <span className="text-tertiary font-medium">{summaryMetrics.avgGoalProgressText}</span>
           </div>
         </div>
 
@@ -337,16 +475,16 @@ export default function DashboardPage() {
             </span>
           </div>
           <div className="flex items-baseline gap-2 mb-space-xs">
-            <span className="font-display text-display text-on-surface leading-none">{activeProjectsCount}</span>
+            <span className="font-display text-display text-on-surface leading-none">{summaryMetrics.activeProjectsCount}</span>
             <span className="font-label-md text-label-md text-on-surface-variant">
               {t("dashboard.stats.projectsLabel")}
             </span>
           </div>
           <div className="flex items-center justify-between pt-space-xs text-on-surface-variant font-label-sm text-label-sm flex-wrap gap-1 text-[10px] sm:text-label-sm">
-            <span className="inline-flex items-center gap-1 text-error">
-              <span className="w-1.5 h-1.5 rounded-full bg-error"></span> {t("dashboard.stats.criticalDue")}
+            <span className={`inline-flex items-center gap-1 ${summaryMetrics.criticalProjectDeadlines > 0 ? "text-error" : "text-on-surface-variant"}`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${summaryMetrics.criticalProjectDeadlines > 0 ? "bg-error" : "bg-outline-variant"}`}></span> {t("dashboard.stats.criticalDue", { count: summaryMetrics.criticalProjectDeadlines })}
             </span>
-            <span>{t("dashboard.stats.totalTasks")}</span>
+            <span>{t("dashboard.stats.totalTasks", { count: summaryMetrics.projectTotalTasks })}</span>
           </div>
         </div>
 
@@ -364,19 +502,19 @@ export default function DashboardPage() {
             </span>
           </div>
           <div className="flex items-baseline gap-2 mb-space-xs">
-            <span className="font-display text-display text-on-surface leading-none">{todayCompletedTasks.length}</span>
+            <span className="font-display text-display text-on-surface leading-none">{summaryMetrics.todayCompletedCount}</span>
             <span className="font-label-md text-label-md text-on-surface-variant">
-              / {todayTasks.length} {t("dashboard.stats.doneOf")}
+              / {summaryMetrics.todayTotalCount} {t("dashboard.stats.doneOf")}
             </span>
           </div>
           <div className="w-full bg-surface-container h-1.5 rounded-full overflow-hidden mt-1 mb-1">
             <div
               className="bg-primary h-full rounded-full transition-all duration-300"
-              style={{ width: `${completionPercentage}%` }}
+              style={{ width: `${summaryMetrics.todayPercent}%` }}
             ></div>
           </div>
           <span className="font-label-sm text-label-sm text-on-surface-variant truncate">
-            {todayTasks.length - todayCompletedTasks.length} {t("dashboard.stats.pendingToday")}
+            {t("dashboard.stats.pendingToday", { count: summaryMetrics.todayPendingCount })}
           </span>
         </div>
 
@@ -394,17 +532,29 @@ export default function DashboardPage() {
             </span>
           </div>
           <div className="flex items-baseline gap-2 mb-space-xs">
-            <span className="font-display text-display text-on-surface leading-none">{completionPercentage}%</span>
-            <span className="inline-flex items-center text-tertiary font-label-sm text-label-sm font-semibold">
-              +8%
-              <span className="material-symbols-outlined text-[14px]">arrow_upward</span>
-            </span>
+            <span className="font-display text-display text-on-surface leading-none">{summaryMetrics.completionRate}%</span>
+            {summaryMetrics.hasComparison && (
+              <span className={`inline-flex items-center font-label-sm text-label-sm font-semibold ${summaryMetrics.rateDelta >= 0 ? "text-tertiary" : "text-error"}`}>
+                {summaryMetrics.rateDelta >= 0 ? `+${summaryMetrics.rateDelta}%` : `${summaryMetrics.rateDelta}%`}
+                <span className="material-symbols-outlined text-[14px]">
+                  {summaryMetrics.rateDelta >= 0 ? "arrow_upward" : "arrow_downward"}
+                </span>
+              </span>
+            )}
           </div>
           <div className="flex items-center justify-between pt-space-xs text-on-surface-variant font-label-sm text-label-sm flex-wrap gap-1 text-[10px] sm:text-label-sm">
-            <span>{t("dashboard.stats.vsLastWeek")}</span>
-            <span className="px-1.5 py-0.5 rounded bg-tertiary/10 text-tertiary text-[10px] font-bold">
-              {t("dashboard.stats.goodStatus")}
+            <span>
+              {summaryMetrics.hasComparison
+                ? t("dashboard.stats.vsLastWeek", { percent: summaryMetrics.lastWeekRate })
+                : t("dashboard.stats.noComparisonData")}
             </span>
+            {summaryMetrics.completionRate > 0 && (
+              <span className="px-1.5 py-0.5 rounded bg-tertiary/10 text-tertiary text-[10px] font-bold">
+                {summaryMetrics.completionRate >= 70
+                  ? t("dashboard.stats.goodStatus")
+                  : t("dashboard.stats.fairStatus", "Normal")}
+              </span>
+            )}
           </div>
         </div>
 
@@ -422,14 +572,23 @@ export default function DashboardPage() {
             </span>
           </div>
           <div className="flex items-baseline gap-2 mb-space-xs">
-            <span className="font-display text-display text-on-surface leading-none">{streakCount ?? 0}</span>
+            <span className="font-display text-display text-on-surface leading-none">{summaryMetrics.currentStreak}</span>
             <span className="font-label-md text-label-md text-on-surface-variant">
               {t("dashboard.stats.daysInRow")}
             </span>
           </div>
           <div className="flex items-center justify-between pt-space-xs text-on-surface-variant font-label-sm text-label-sm flex-wrap gap-1 text-[10px] sm:text-label-sm">
-            <span className="text-on-surface font-medium">{t("dashboard.stats.keepGoing")}</span>
-            <span className="text-on-surface-variant">{t("dashboard.stats.bestStreak")}</span>
+            <span className="text-on-surface font-medium">
+              {summaryMetrics.currentStreak > 0
+                ? t("dashboard.stats.keepGoing")
+                : t("dashboard.stats.startToday")}
+            </span>
+            <span className="text-on-surface-variant">
+              {t("dashboard.stats.bestStreak", {
+                count: summaryMetrics.bestStreak,
+                plural: summaryMetrics.bestStreak === 1 ? "" : "s"
+              })}
+            </span>
           </div>
         </div>
       </div>

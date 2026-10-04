@@ -12,7 +12,7 @@ import {
   getTimePeriod,
   formatLocalDateLong,
   formatLocalDateToISO,
-  calculateStreak
+  calculateStreakMetrics
 } from "../utils/dateTime";
 
 const WorkspaceContext = createContext(null);
@@ -285,6 +285,10 @@ export function WorkspaceProvider({ children }) {
     localStorage.setItem("ignos_notes", JSON.stringify(notes));
   }, [notes]);
 
+  useEffect(() => {
+    localStorage.setItem("ignos_activity_feed", JSON.stringify(activityFeed));
+  }, [activityFeed]);
+
   // Task actions
   const toggleTask = (taskId) => {
     let affectedProjectId = null;
@@ -528,6 +532,7 @@ export function WorkspaceProvider({ children }) {
         type: "Target Baru",
         description: `Target dibuat: "${newGoal.title}"`,
         time: "Baru saja",
+        date: formatLocalDateToISO(currentDate),
         color: "bg-tertiary"
       },
       ...prev
@@ -645,6 +650,7 @@ export function WorkspaceProvider({ children }) {
         type: "Proyek Baru",
         description: `Proyek dibuat: "${newProject.title}"`,
         time: "Baru saja",
+        date: formatLocalDateToISO(currentDate),
         color: "bg-secondary"
       },
       ...prev
@@ -727,7 +733,9 @@ export function WorkspaceProvider({ children }) {
   const overdueTasksCount = tasks.filter((t) => t.status === "overdue").length;
   const upcomingTasksCount = tasks.filter((t) => t.status === "upcoming").length;
   const completedTasksCount = tasks.filter((t) => t.completed).length;
-  const streakCount = calculateStreak(tasks, activityFeed, currentDate);
+  const streakMetrics = calculateStreakMetrics(tasks, activityFeed, currentDate);
+  const streakCount = streakMetrics.currentStreak;
+  const bestStreakCount = streakMetrics.bestStreak;
 
   const value = {
     language,
@@ -797,6 +805,7 @@ export function WorkspaceProvider({ children }) {
     upcomingTasksCount,
     completedTasksCount,
     streakCount,
+    bestStreakCount,
     currentTime: currentDate,
     currentDate,
     timePeriod,
