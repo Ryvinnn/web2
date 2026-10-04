@@ -159,7 +159,7 @@ export const translations = {
       todayDate: "{date}",
       liveSync: "Live Sinkronisasi",
       filterStatusBtn: "Filter Status",
-      quickAddBtn: "Create",
+      quickAddBtn: "Buat",
       dropdown: {
         newGoal: "Target / Goal Baru",
         newProject: "Project Baru",
