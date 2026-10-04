@@ -1,9 +1,10 @@
-import React, { useState, useMemo } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import React, { useState, useMemo, useEffect } from "react";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useWorkspace } from "../context/WorkspaceContext";
 
 export default function GoalsPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { goals, openModal, toggleMilestone, addGoalMilestone, deleteGoalMilestone, deleteGoal, showToast, language, t } = useWorkspace();
 
   const [categoryFilter, setCategoryFilter] = useState("all");
@@ -13,6 +14,14 @@ export default function GoalsPage() {
   const [selectedGoalId, setSelectedGoalId] = useState(goals[0]?.id || "g1");
   const [newStepTitle, setNewStepTitle] = useState("");
   const [addingStep, setAddingStep] = useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const gId = params.get("goalId");
+    if (gId && goals.some((g) => g.id === gId)) {
+      setSelectedGoalId(gId);
+    }
+  }, [location.search, goals]);
 
   const categories = [
     { id: "all", label: t("goals.allTab") },

@@ -1,12 +1,12 @@
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from "react";
 import {
   initialGoals,
   initialProjects,
   initialTasks,
-  initialNeedsAttention,
   initialActivityFeed,
   initialNotes
 } from "../data/mockData";
+import { computeNeedsAttention } from "../utils/attention";
 import { translations } from "../utils/translations";
 import {
   getTimePeriod,
@@ -90,14 +90,7 @@ export function WorkspaceProvider({ children }) {
   const fallbackUserName = language === "id" ? "Pengguna Admin" : "Admin User";
   const currentUserName = (user && user.name && user.name.trim()) ? user.name.trim() : fallbackUserName;
 
-  const getGreeting = (overrideDate = null, overrideName = null) => {
-    const targetDate = overrideDate || currentDate;
-    const period = getTimePeriod(targetDate);
-    const targetUser = overrideName !== null ? overrideName : currentUserName;
-    return t(`dashboard.greetings.${period}`, { user: targetUser });
-  };
-
-  const t = (path, fallbackOrVars = "", vars = null) => {
+  const t = useCallback((path, fallbackOrVars = "", vars = null) => {
     if (!path) return "";
     const fallback = typeof fallbackOrVars === "string" ? fallbackOrVars : "";
     const variables = typeof fallbackOrVars === "object" && fallbackOrVars !== null ? fallbackOrVars : vars;
@@ -106,7 +99,9 @@ export function WorkspaceProvider({ children }) {
     if (path === "dashboard.greeting") {
       const period = getTimePeriod(currentDate);
       const name = (variables && variables.user !== undefined) ? variables.user : currentUserName;
-      return t(`dashboard.greetings.${period}`, { user: name });
+      const dict = translations[language] || translations["id"];
+      const greetingTemplate = dict?.dashboard?.greetings?.[period] || translations["id"]?.dashboard?.greetings?.[period] || "";
+      return greetingTemplate.replace(/\{user\}/g, String(name));
     }
 
     // Dynamic local today date
@@ -147,6 +142,13 @@ export function WorkspaceProvider({ children }) {
       }
     }
     return result;
+  }, [language, currentDate, currentUserName]);
+
+  const getGreeting = (overrideDate = null, overrideName = null) => {
+    const targetDate = overrideDate || currentDate;
+    const period = getTimePeriod(targetDate);
+    const targetUser = overrideName !== null ? overrideName : currentUserName;
+    return t(`dashboard.greetings.${period}`, { user: targetUser });
   };
 
   // Load state from localStorage or initial defaults
@@ -186,14 +188,26 @@ export function WorkspaceProvider({ children }) {
     }
   });
 
-  const [needsAttention, setNeedsAttention] = useState(() => {
+  // Dynamic "Perlu Perhatian" / "Needs Attention" synchronized with live Projects, Goals, Tasks, and Subtasks
+  const needsAttention = useMemo(() => {
+    return computeNeedsAttention({
+      projects,
+      goals,
+      tasks,
+      currentDate,
+      language,
+      t
+    });
+  }, [projects, goals, tasks, currentDate, language, t]);
+
+  // Clean up any stale static mock data from localStorage
+  useEffect(() => {
     try {
-      const saved = localStorage.getItem("ignos_needs_attention");
-      return saved ? JSON.parse(saved) : initialNeedsAttention;
+      localStorage.removeItem("ignos_needs_attention");
     } catch {
-      return initialNeedsAttention;
+      // ignore
     }
-  });
+  }, []);
 
   const [activityFeed, setActivityFeed] = useState(() => {
     try {

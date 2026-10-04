@@ -1,9 +1,10 @@
-import React, { useState, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import React, { useState, useMemo, useEffect } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useWorkspace } from "../context/WorkspaceContext";
 
 export default function TasksPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const {
     tasks,
     projects,
@@ -36,6 +37,25 @@ export default function TasksPage() {
   const [newSubtaskTitle, setNewSubtaskTitle] = useState("");
   const [commentText, setCommentText] = useState("");
   const [mobileInspectorOpen, setMobileInspectorOpen] = useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const tId = params.get("taskId") || params.get("id");
+    const targetId = tId || selectedTaskId;
+    if (targetId) {
+      if (tId && tId !== selectedTaskId) {
+        setSelectedTaskId(tId);
+      }
+      const target = tasks.find((t) => t.id === targetId);
+      if (target) {
+        if (target.status === "overdue") setActiveTab("overdue");
+        else if (target.status === "today") setActiveTab("today");
+        else if (target.status === "upcoming") setActiveTab("upcoming");
+        else if (target.completed) setActiveTab("completed");
+        else setActiveTab("all");
+      }
+    }
+  }, [location.search, selectedTaskId, tasks, setSelectedTaskId]);
 
   // Find active task for inspector
   const activeTask = useMemo(() => {

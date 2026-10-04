@@ -20,6 +20,7 @@ export default function DashboardPage() {
     toggleAllTasks,
     openModal,
     openProjectModal,
+    setSelectedTaskId,
     activeGoalsCount,
     activeProjectsCount,
     todayTasks,
@@ -33,6 +34,7 @@ export default function DashboardPage() {
 
   const [period, setPeriod] = useState("weekly");
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [showAllAttention, setShowAllAttention] = useState(false);
 
   // Calculate dynamic weekly and monthly activity data from actual tasks
   const weeklyDays = useMemo(() => {
@@ -130,32 +132,40 @@ export default function DashboardPage() {
 
   // Helper for translating needs attention items
   const getAttentionTitle = (item) => {
-    if (item.id === "na-1") return t("dashboard.attentionLabels.authTitle", item.title);
-    if (item.id === "na-2") return t("dashboard.attentionLabels.qaTitle", item.title);
-    if (item.id === "na-3") return t("dashboard.attentionLabels.eloquentTitle", item.title);
-    if (item.id === "na-4") return t("dashboard.attentionLabels.migrationTitle", item.title);
-    return item.title;
+    return item.title || "";
   };
 
   const getAttentionSubtitle = (item) => {
-    if (item.id === "na-1") return t("dashboard.attentionLabels.authSub", item.subtitle);
-    if (item.id === "na-2") return t("dashboard.attentionLabels.qaSub", item.subtitle);
-    if (item.id === "na-3") return t("dashboard.attentionLabels.eloquentSub", item.subtitle);
-    if (item.id === "na-4") return t("dashboard.attentionLabels.migrationSub", item.subtitle);
-    return item.subtitle;
+    return item.subtitle || "";
   };
 
   const getAttentionAction = (item) => {
-    if (item.actionLabel.includes("Lihat") || item.actionLabel.includes("View")) {
-      return t("dashboard.attentionLabels.viewAction");
+    return item.actionLabel || t("dashboard.attentionLabels.viewAction");
+  };
+
+  // Handle dynamic action click for items requiring attention
+  const handleAttentionAction = (item) => {
+    if (!item) return;
+
+    if (item.type === "project") {
+      const projectKey = item.projectKey || item.projectId;
+      if (projectKey) {
+        openProjectModal(projectKey);
+      } else {
+        navigate("/projects");
+      }
+    } else if (item.type === "goal") {
+      const goalId = item.goalId || item.entityId;
+      navigate(goalId ? `/goals?goalId=${goalId}` : "/goals");
+    } else if (item.type === "task" || item.type === "subtask") {
+      const taskId = item.taskId || item.entityId;
+      if (taskId) {
+        setSelectedTaskId(taskId);
+      }
+      navigate(taskId ? `/tasks?taskId=${taskId}` : "/tasks");
+    } else if (item.targetRoute) {
+      navigate(item.targetRoute);
     }
-    if (item.actionLabel.includes("Review")) {
-      return t("dashboard.attentionLabels.reviewAction");
-    }
-    if (item.actionLabel.includes("Siapkan") || item.actionLabel.includes("Prepare")) {
-      return t("dashboard.attentionLabels.prepareAction");
-    }
-    return item.actionLabel;
   };
 
   // Helper for translating activity feed items
@@ -716,38 +726,83 @@ export default function DashboardPage() {
                   {t("dashboard.needsAttentionTitle")}
                 </h3>
               </div>
-              <span className="px-2 py-0.5 rounded-full bg-error-container text-on-error-container font-label-sm text-label-sm font-bold">
+              <span
+                className={`px-2 py-0.5 rounded-full font-label-sm text-label-sm font-bold ${
+                  needsAttention.length > 0
+                    ? "bg-error-container text-on-error-container"
+                    : "bg-surface-container text-on-surface-variant"
+                }`}
+              >
                 {needsAttention.length} {t("dashboard.needsAttentionItems")}
               </span>
             </div>
 
-            <div className="flex flex-col gap-space-sm">
-              {needsAttention.map((item) => (
-                <div
-                  key={item.id}
-                  className="p-space-sm rounded-lg bg-surface-container-low hover:bg-surface-container transition-colors flex items-center justify-between"
-                >
-                  <div className="flex items-start gap-space-sm min-w-0">
-                    <span className={`w-2 h-2 rounded-full ${item.dotColor} mt-2 flex-shrink-0`}></span>
-                    <div className="flex flex-col min-w-0">
-                      <span className="font-label-md text-label-md text-on-surface truncate">
-                        {getAttentionTitle(item)}
-                      </span>
-                      <span className={`font-label-sm text-label-sm ${item.dotColor === "bg-error" ? "text-error" : "text-on-surface-variant"}`}>
-                        {getAttentionSubtitle(item)}
-                      </span>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => navigate(item.targetRoute)}
-                    type="button"
-                    className={`px-2.5 py-1 rounded bg-surface-container-lowest text-label-sm font-label-sm transition-colors shadow-sm ${item.actionColor} flex-shrink-0 ml-2`}
-                  >
-                    {getAttentionAction(item)}
-                  </button>
+            {needsAttention.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-6 px-4 text-center rounded-lg bg-surface-container-low/50 border border-dashed border-outline-variant/40">
+                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary mb-2">
+                  <span className="material-symbols-outlined text-[22px]">task_alt</span>
                 </div>
-              ))}
-            </div>
+                <span className="font-label-md text-label-md font-semibold text-on-surface mb-1">
+                  {t("dashboard.needsAttentionEmptyTitle")}
+                </span>
+                <p className="font-body-sm text-body-sm text-on-surface-variant max-w-xs mb-3">
+                  {t("dashboard.needsAttentionEmptyDesc")}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => openModal("task")}
+                  className="px-3 py-1.5 rounded-lg bg-surface-container hover:bg-surface-container-high text-primary font-label-sm text-label-sm font-medium flex items-center gap-1.5 transition-colors shadow-sm"
+                >
+                  <span className="material-symbols-outlined text-[16px]">add</span>
+                  <span>{t("dashboard.needsAttentionAddAction")}</span>
+                </button>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-space-sm">
+                {(showAllAttention ? needsAttention : needsAttention.slice(0, 4)).map((item) => (
+                  <div
+                    key={item.id}
+                    className="p-space-sm rounded-lg bg-surface-container-low hover:bg-surface-container transition-colors flex items-center justify-between"
+                  >
+                    <div className="flex items-start gap-space-sm min-w-0">
+                      <span className={`w-2 h-2 rounded-full ${item.dotColor} mt-2 flex-shrink-0`}></span>
+                      <div className="flex flex-col min-w-0">
+                        <span className="font-label-md text-label-md text-on-surface truncate">
+                          {getAttentionTitle(item)}
+                        </span>
+                        <span className={`font-label-sm text-label-sm ${item.dotColor === "bg-error" ? "text-error" : "text-on-surface-variant"}`}>
+                          {getAttentionSubtitle(item)}
+                        </span>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => handleAttentionAction(item)}
+                      type="button"
+                      className={`px-2.5 py-1 rounded bg-surface-container-lowest text-label-sm font-label-sm transition-colors shadow-sm ${item.actionColor} flex-shrink-0 ml-2`}
+                    >
+                      {getAttentionAction(item)}
+                    </button>
+                  </div>
+                ))}
+
+                {needsAttention.length > 4 && (
+                  <button
+                    type="button"
+                    onClick={() => setShowAllAttention((prev) => !prev)}
+                    className="w-full py-1.5 px-space-sm rounded-lg bg-surface-container-low hover:bg-surface-container text-on-surface-variant hover:text-primary font-label-sm text-label-sm flex items-center justify-center gap-1 transition-colors mt-1"
+                  >
+                    <span className="material-symbols-outlined text-[16px]">
+                      {showAllAttention ? "expand_less" : "expand_more"}
+                    </span>
+                    <span>
+                      {showAllAttention
+                        ? t("dashboard.needsAttentionShowLess")
+                        : t("dashboard.needsAttentionViewAll", { count: needsAttention.length })}
+                    </span>
+                  </button>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Panel 2: Today's Task Interactive Checklist */}
