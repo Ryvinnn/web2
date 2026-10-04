@@ -159,7 +159,7 @@ export const translations = {
       todayDate: "{date}",
       liveSync: "Live Sinkronisasi",
       filterStatusBtn: "Filter Status",
-      quickAddBtn: "+ Buat Jadwal / Task",
+      quickAddBtn: "Create",
       dropdown: {
         newGoal: "Target / Goal Baru",
         newProject: "Project Baru",
@@ -678,7 +678,7 @@ export const translations = {
       todayDate: "{date}",
       liveSync: "Live Sync",
       filterStatusBtn: "Filter Status",
-      quickAddBtn: "+ Create Item / Task",
+      quickAddBtn: "Create",
       dropdown: {
         newGoal: "New Target / Goal",
         newProject: "New Project",
