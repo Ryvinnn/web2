@@ -495,8 +495,8 @@ export const initialActivityFeed = [
   {
     id: "act-3",
     type: "Absensi Kehadiran Tercatat",
-    description: "Check-in jam 08:55 WIB dari lokasi Kantor Studio.",
-    time: "08:55 WIB",
+    description: "Check-in jam 08:55 dari lokasi Kantor Studio.",
+    time: "08:55",
     color: "bg-secondary"
   }
 ];

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useWorkspace } from "../../context/WorkspaceContext";
+import { formatLocalDateToISO, formatLocalDateToInput } from "../../utils/dateTime";
 
 export default function CreateModal() {
   const {
@@ -24,7 +25,7 @@ export default function CreateModal() {
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState("Ignos Attendance SaaS");
   const [priority, setPriority] = useState("medium");
-  const [deadline, setDeadline] = useState("2026-09-28");
+  const [deadline, setDeadline] = useState(() => formatLocalDateToISO(new Date()));
   const [coverImage, setCoverImage] = useState("");
   const [coverImagePosition, setCoverImagePosition] = useState(50);
   const [isDragging, setIsDragging] = useState(false);
@@ -48,13 +49,7 @@ export default function CreateModal() {
   }, [isOpen, closeModal]);
 
   const formatDateForInput = (dateStr) => {
-    if (!dateStr) return "2026-09-28";
-    if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return dateStr;
-    const d = new Date(dateStr);
-    if (!isNaN(d.getTime())) {
-      return d.toISOString().split("T")[0];
-    }
-    return "2026-09-28";
+    return formatLocalDateToInput(dateStr);
   };
 
   useEffect(() => {
@@ -68,7 +63,7 @@ export default function CreateModal() {
       if (initialData.deadline) {
         setDeadline(formatDateForInput(initialData.deadline));
       } else {
-        setDeadline("2026-09-28");
+        setDeadline(formatLocalDateToISO(new Date()));
       }
       setCoverImage(initialData.coverImage || "");
       setCoverImagePosition(initialData.coverImagePosition ?? 50);
@@ -90,7 +85,7 @@ export default function CreateModal() {
       setTitle("");
       setDescription("");
       setPriority("medium");
-      setDeadline("2026-09-28");
+      setDeadline(formatLocalDateToISO(new Date()));
       setCoverImage("");
       setCoverImagePosition(50);
       setShowUrlInput(false);

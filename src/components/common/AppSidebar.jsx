@@ -4,7 +4,7 @@ import { useWorkspace } from "../../context/WorkspaceContext";
 
 export default function AppSidebar() {
   const navigate = useNavigate();
-  const { t, sidebarOpen, closeSidebar } = useWorkspace();
+  const { t, sidebarOpen, closeSidebar, user, currentUserName } = useWorkspace();
 
   const mainNav = [
     { name: t("sidebar.dashboard"), path: "/dashboard", icon: "grid_view" },
@@ -144,10 +144,10 @@ export default function AppSidebar() {
           >
             <div className="flex items-center gap-space-sm min-w-0">
               <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center flex-shrink-0 text-on-primary font-bold text-xs select-none">
-                LB
+                {user?.initials || "LB"}
               </div>
               <div className="flex flex-col min-w-0">
-                <span className="font-label-md text-label-md text-on-surface truncate">Laba</span>
+                <span className="font-label-md text-label-md text-on-surface truncate">{user?.name || currentUserName}</span>
                 <span className="font-label-sm text-label-sm text-on-surface-variant truncate">
                   {t("sidebar.adminUser")}
                 </span>

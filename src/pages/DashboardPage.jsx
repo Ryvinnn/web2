@@ -75,6 +75,16 @@ export default function DashboardPage() {
     return act.description;
   };
 
+  const getActivityTime = (act) => {
+    if (act.id === "act-1") return language === "id" ? `2 ${t("common.hoursAgo")}` : "2 hours ago";
+    if (act.id === "act-2") return language === "id" ? `4 ${t("common.hoursAgo")}` : "4 hours ago";
+    if (act.id === "act-3") return language === "id" ? "08:55" : "08:55 AM";
+    if (act.time === "Baru saja" || act.time === "Just now") {
+      return t("common.justNow");
+    }
+    return act.time;
+  };
+
   return (
     <div className="flex flex-col w-full">
       {/* Top Greeting & Action Header */}
@@ -739,7 +749,7 @@ export default function DashboardPage() {
                     {getActivityDesc(act)}
                   </p>
                   <span className="font-label-sm text-label-sm text-on-surface-variant mt-0.5">
-                    {act.time}
+                    {getActivityTime(act)}
                   </span>
                 </div>
               ))}

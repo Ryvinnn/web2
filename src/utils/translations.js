@@ -23,6 +23,7 @@ export const translations = {
       savedSuccess: "Perubahan berhasil disimpan!",
       other: "Lainnya",
       due: "Tenggat",
+      tomorrow: "Besok",
       daysAgo: "hari yang lalu",
       hoursAgo: "jam yang lalu",
       minutesAgo: "menit yang lalu",
@@ -144,9 +145,14 @@ export const translations = {
     dashboard: {
       tag: "Pusat Kendali Eksekutif",
       subtag: "Ikhtisar Hari Ini",
-      greeting: "Selamat sore, Admin User!",
+      greeting: "Selamat siang, {user}!",
+      greetings: {
+        morning: "Selamat pagi, {user}!",
+        afternoon: "Selamat siang, {user}!",
+        evening: "Selamat malam, {user}!"
+      },
       subtitle: "Pantau kelola tujuan, jadwal, task, dan aktivitas utama kamu hari ini.",
-      todayDate: "Rabu, 23 September 2026",
+      todayDate: "{date}",
       liveSync: "Live Sinkronisasi",
       filterStatusBtn: "Filter Status",
       quickAddBtn: "+ Buat Jadwal / Task",
@@ -219,7 +225,7 @@ export const translations = {
         goalUpdated: "Target Diperbarui",
         goalUpdatedDesc: 'Menambahkan 2 milestone baru pada proyek "Fullstack Mastery".',
         attendanceLogged: "Absensi Kehadiran Tercatat",
-        attendanceLoggedDesc: "Check-in jam 08:55 WIB dari lokasi Kantor Studio."
+        attendanceLoggedDesc: "Check-in jam 08:55 dari lokasi Kantor Studio."
       }
     },
     goals: {
@@ -457,9 +463,9 @@ export const translations = {
         tag: "Manajemen",
         subtag: "Jadwal & Tenggat",
         title: "Kalender & Sprint",
-        desc: "Kalender eksekusi September – Oktober 2026 yang selaras dengan milestone.",
-        monthYear: "September 2026",
-        todayBadge: "Hari Ini: Rab, 23 Sep"
+        desc: "Kalender eksekusi yang selaras dengan milestone dan tenggat tugas.",
+        monthYear: "Kalender Bulanan",
+        todayBadge: "Hari Ini"
       },
       statistics: {
         tag: "Manajemen",
@@ -512,6 +518,7 @@ export const translations = {
       savedSuccess: "Changes saved successfully!",
       other: "Other",
       due: "Due",
+      tomorrow: "Tomorrow",
       daysAgo: "days ago",
       hoursAgo: "hours ago",
       minutesAgo: "minutes ago",
@@ -633,9 +640,14 @@ export const translations = {
     dashboard: {
       tag: "Executive Command Center",
       subtag: "Today's Overview",
-      greeting: "Good afternoon, Admin User!",
+      greeting: "Good afternoon, {user}!",
+      greetings: {
+        morning: "Good morning, {user}!",
+        afternoon: "Good afternoon, {user}!",
+        evening: "Good evening, {user}!"
+      },
       subtitle: "Monitor and manage your goals, schedule, tasks, and key activities today.",
-      todayDate: "Wednesday, September 23, 2026",
+      todayDate: "{date}",
       liveSync: "Live Sync",
       filterStatusBtn: "Filter Status",
       quickAddBtn: "+ Create Item / Task",
@@ -946,9 +958,9 @@ export const translations = {
         tag: "Management",
         subtag: "Schedule & Deadlines",
         title: "Calendar & Sprints",
-        desc: "September – October 2026 execution calendar with aligned milestones.",
-        monthYear: "September 2026",
-        todayBadge: "Today: Wed, Sep 23"
+        desc: "Execution calendar aligned with project milestones and task deadlines.",
+        monthYear: "Monthly Calendar",
+        todayBadge: "Today"
       },
       statistics: {
         tag: "Management",

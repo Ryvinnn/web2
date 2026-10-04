@@ -19,6 +19,8 @@ export default function AppHeader() {
     markAllNotificationsRead,
     userMenuOpen,
     setUserMenuOpen,
+    user,
+    currentUserName,
     t
   } = useWorkspace();
 
@@ -194,7 +196,7 @@ export default function AppHeader() {
             title="User Profile"
           >
             <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-primary flex items-center justify-center shadow-xs text-on-primary font-bold text-[11px] sm:text-xs select-none">
-              LB
+              {user?.initials || "LB"}
             </div>
             <span className="absolute bottom-0 right-0 w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full bg-tertiary ring-2 ring-surface"></span>
           </div>
@@ -203,8 +205,8 @@ export default function AppHeader() {
           {userMenuOpen && (
             <div className="absolute right-0 top-10 sm:top-11 w-56 max-w-[calc(100vw-1.5rem)] bg-surface-container-lowest rounded-2xl shadow-2xl p-space-md z-50 border border-surface-container flex flex-col gap-1 animate-in fade-in zoom-in-95 duration-150">
               <div className="px-2 py-1.5 border-b border-surface-container mb-1">
-                <span className="font-headline-sm text-headline-sm font-semibold text-on-surface block">Laba</span>
-                <span className="font-label-sm text-label-sm text-on-surface-variant block truncate">laba@ignos.workspace</span>
+                <span className="font-headline-sm text-headline-sm font-semibold text-on-surface block truncate">{user?.name || currentUserName}</span>
+                <span className="font-label-sm text-label-sm text-on-surface-variant block truncate">{user?.email || "laba@ignos.workspace"}</span>
                 <span className="mt-1 inline-block px-1.5 py-0.2 rounded text-[10px] font-bold bg-primary/10 text-primary uppercase">
                   {t("sidebar.adminUser")}
                 </span>

@@ -257,14 +257,48 @@ export function NotesPage() {
 }
 
 export function CalendarPage() {
-  const { t, language, openModal } = useWorkspace();
-  const [monthOffset, setMonthOffset] = useState(0); // 0 = Sep 2026, -1 = Aug, +1 = Oct
-  const [selectedDay, setSelectedDay] = useState(23);
+  const { t, language, openModal, currentDate } = useWorkspace();
+  const [monthOffset, setMonthOffset] = useState(0);
 
-  const monthNames = language === "id"
-    ? ["Agustus 2026", "September 2026", "Oktober 2026"]
-    : ["August 2026", "September 2026", "October 2026"];
-  const currentMonthLabel = monthNames[monthOffset + 1] || "September 2026";
+  // Local device date calculations
+  const now = currentDate || new Date();
+  const todayYear = now.getFullYear();
+  const todayMonth = now.getMonth();
+  const todayDateNum = now.getDate();
+
+  const [selectedDay, setSelectedDay] = useState(todayDateNum);
+
+  // Target viewing month based on monthOffset
+  const viewingDate = useMemo(() => {
+    return new Date(todayYear, todayMonth + monthOffset, 1);
+  }, [todayYear, todayMonth, monthOffset]);
+
+  const viewingYear = viewingDate.getFullYear();
+  const viewingMonth = viewingDate.getMonth();
+  const isViewingCurrentMonth = viewingYear === todayYear && viewingMonth === todayMonth;
+
+  const currentMonthLabel = useMemo(() => {
+    const locale = language === "id" ? "id-ID" : "en-US";
+    return new Intl.DateTimeFormat(locale, {
+      month: "long",
+      year: "numeric"
+    }).format(viewingDate);
+  }, [language, viewingDate]);
+
+  const daysInMonth = useMemo(() => {
+    return new Date(viewingYear, viewingMonth + 1, 0).getDate();
+  }, [viewingYear, viewingMonth]);
+
+  // First day of month (Mon=0, Tue=1, ..., Sun=6)
+  const firstDayOfWeek = useMemo(() => {
+    return (new Date(viewingYear, viewingMonth, 1).getDay() + 6) % 7;
+  }, [viewingYear, viewingMonth]);
+
+  // Total calendar slots (ceil to multiple of 7: 35 or 42)
+  const totalSlots = useMemo(() => {
+    const total = firstDayOfWeek + daysInMonth;
+    return total > 35 ? 42 : 35;
+  }, [firstDayOfWeek, daysInMonth]);
 
   const days = [
     t("common.days.mon"),
@@ -276,13 +310,34 @@ export function CalendarPage() {
     t("common.days.sun")
   ];
 
-  const eventsMap = {
-    15: { title: "Sprint Backlog Review", tag: "Review", color: "bg-surface-container text-on-surface" },
-    23: { title: "Team Attendance Sync", tag: "Today", color: "bg-primary text-on-primary" },
-    24: { title: "M4 Auth Migration Deadline", tag: "Milestone", color: "bg-secondary-container text-primary" },
-    28: { title: "Ignos Core Engine Due", tag: "Release", color: "bg-primary-container text-on-primary" },
-    30: { title: "Portfolio V2 Review", tag: "Review", color: "bg-tertiary-container text-tertiary" },
-  };
+  const eventsMap = useMemo(() => {
+    const map = {};
+    // Add today's event dynamically
+    map[todayDateNum] = {
+      title: "Team Attendance Sync",
+      tag: language === "id" ? "Hari Ini" : "Today",
+      color: "bg-primary text-on-primary"
+    };
+
+    const sprintReviewDay = Math.min(15, daysInMonth);
+    const authMigrationDay = Math.min(todayDateNum + 1, daysInMonth);
+    const releaseDay = Math.min(Math.max(28, daysInMonth - 2), daysInMonth);
+    const portfolioReviewDay = daysInMonth;
+
+    if (!map[sprintReviewDay]) {
+      map[sprintReviewDay] = { title: "Sprint Backlog Review", tag: "Review", color: "bg-surface-container text-on-surface" };
+    }
+    if (!map[authMigrationDay]) {
+      map[authMigrationDay] = { title: "M4 Auth Migration Deadline", tag: "Milestone", color: "bg-secondary-container text-primary" };
+    }
+    if (!map[releaseDay]) {
+      map[releaseDay] = { title: "Ignos Core Engine Due", tag: "Release", color: "bg-primary-container text-on-primary" };
+    }
+    if (!map[portfolioReviewDay]) {
+      map[portfolioReviewDay] = { title: "Portfolio V2 Review", tag: "Review", color: "bg-tertiary-container text-tertiary" };
+    }
+    return map;
+  }, [todayDateNum, daysInMonth, language]);
 
   return (
     <div className="flex flex-col w-full gap-space-xl">
@@ -313,19 +368,17 @@ export function CalendarPage() {
             <div className="flex items-center gap-1 bg-surface-container-low p-1 rounded-lg">
               <button
                 type="button"
-                onClick={() => setMonthOffset((prev) => Math.max(-1, prev - 1))}
-                disabled={monthOffset <= -1}
-                className="w-7 h-7 flex items-center justify-center rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container disabled:opacity-30 disabled:pointer-events-none transition-colors"
-                title="Bulan sebelumnya"
+                onClick={() => setMonthOffset((prev) => prev - 1)}
+                className="w-7 h-7 flex items-center justify-center rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors"
+                title={language === "id" ? "Bulan sebelumnya" : "Previous month"}
               >
                 <span className="material-symbols-outlined text-[18px]">chevron_left</span>
               </button>
               <button
                 type="button"
-                onClick={() => setMonthOffset((prev) => Math.min(1, prev + 1))}
-                disabled={monthOffset >= 1}
-                className="w-7 h-7 flex items-center justify-center rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container disabled:opacity-30 disabled:pointer-events-none transition-colors"
-                title="Bulan berikutnya"
+                onClick={() => setMonthOffset((prev) => prev + 1)}
+                className="w-7 h-7 flex items-center justify-center rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors"
+                title={language === "id" ? "Bulan berikutnya" : "Next month"}
               >
                 <span className="material-symbols-outlined text-[18px]">chevron_right</span>
               </button>
@@ -336,11 +389,11 @@ export function CalendarPage() {
               type="button"
               onClick={() => {
                 setMonthOffset(0);
-                setSelectedDay(23);
+                setSelectedDay(todayDateNum);
               }}
               className="px-2.5 py-1 rounded-lg bg-surface-container-low text-primary font-label-md text-label-md hover:bg-surface-container transition-colors cursor-pointer"
             >
-              {t("secondary.calendar.todayBadge")}
+              {t("secondary.calendar.todayBadge")} ({todayDateNum})
             </button>
           </div>
         </div>
@@ -354,16 +407,17 @@ export function CalendarPage() {
             </div>
 
             <div className="grid grid-cols-7 gap-2">
-              {Array.from({ length: 35 }).map((_, i) => {
-                const dayNum = i - 1; // start from roughly Mon
-                const isToday = dayNum === 23 && monthOffset === 0;
+              {Array.from({ length: totalSlots }).map((_, i) => {
+                const dayNum = i - firstDayOfWeek + 1;
+                const isValidDay = dayNum >= 1 && dayNum <= daysInMonth;
+                const isToday = isViewingCurrentMonth && dayNum === todayDateNum;
                 const isSelected = dayNum === selectedDay;
-                const event = dayNum > 0 && dayNum <= 30 ? eventsMap[dayNum] : null;
+                const event = isValidDay ? eventsMap[dayNum] : null;
                 return (
                   <div
                     key={i}
-                    onClick={() => dayNum > 0 && dayNum <= 30 && setSelectedDay(dayNum)}
-                    className={`min-h-[90px] p-2 rounded-xl flex flex-col justify-between transition-all select-none ${dayNum <= 0 || dayNum > 30
+                    onClick={() => isValidDay && setSelectedDay(dayNum)}
+                    className={`min-h-[90px] p-2 rounded-xl flex flex-col justify-between transition-all select-none ${!isValidDay
                       ? "bg-surface-container-low/40 opacity-40 pointer-events-none"
                       : isSelected
                         ? "bg-primary/10 border-2 border-primary cursor-pointer shadow-xs"
@@ -374,7 +428,7 @@ export function CalendarPage() {
                   >
                     <div className="flex justify-between items-center">
                       <span className={`text-label-md font-semibold ${isToday || isSelected ? "text-primary" : "text-on-surface"}`}>
-                        {dayNum > 0 && dayNum <= 30 ? dayNum : ""}
+                        {isValidDay ? dayNum : ""}
                       </span>
                       {isToday && (
                         <span className="w-2 h-2 rounded-full bg-primary animate-pulse"></span>
@@ -424,8 +478,8 @@ export function CalendarPage() {
                 type="button"
                 onClick={() => {
                   const dayStr = String(selectedDay).padStart(2, "0");
-                  const monthNum = String(9 + monthOffset).padStart(2, "0");
-                  openModal("task", { deadline: `2026-${monthNum}-${dayStr}` });
+                  const monthNum = String(viewingMonth + 1).padStart(2, "0");
+                  openModal("task", { deadline: `${viewingYear}-${monthNum}-${dayStr}` });
                 }}
                 className="px-3 py-1.5 rounded-lg bg-primary text-on-primary text-label-md font-medium shadow-xs hover:bg-primary-container transition-colors self-start sm:self-auto cursor-pointer flex items-center gap-1"
               >
@@ -512,7 +566,8 @@ export function StatisticsPage() {
 }
 
 export function SettingsPage() {
-  const { language, setLanguage, t } = useWorkspace();
+  const { language, setLanguage, t, user, updateUser } = useWorkspace();
+  const [displayName, setDisplayName] = useState(user?.name || "Laba");
   const [toastMessage, setToastMessage] = useState("");
 
   const handleLanguageChange = (newLang) => {
@@ -528,6 +583,7 @@ export function SettingsPage() {
   };
 
   const handleSave = () => {
+    updateUser({ name: displayName });
     setToastMessage(t("common.savedSuccess"));
     setTimeout(() => {
       setToastMessage("");
@@ -678,7 +734,8 @@ export function SettingsPage() {
               </label>
               <input
                 type="text"
-                defaultValue="Laba"
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
                 className="w-full px-3 py-2 rounded-lg bg-surface-container-low text-on-surface text-body-md focus:outline-none focus:ring-1 focus:ring-primary"
               />
             </div>

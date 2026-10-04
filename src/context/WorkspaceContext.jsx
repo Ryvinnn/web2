@@ -8,6 +8,10 @@ import {
   initialNotes
 } from "../data/mockData";
 import { translations } from "../utils/translations";
+import {
+  getTimePeriod,
+  formatLocalDateLong
+} from "../utils/dateTime";
 
 const WorkspaceContext = createContext(null);
 
@@ -26,10 +30,88 @@ export function WorkspaceProvider({ children }) {
     document.documentElement.lang = language;
   }, [language]);
 
+  // Device local time tracking (using browser's actual local time)
+  const [currentDate, setCurrentDate] = useState(() => new Date());
+
+  useEffect(() => {
+    const updateTime = () => setCurrentDate(new Date());
+    // Update every 30 seconds to catch minute/hour boundaries promptly
+    const timer = setInterval(updateTime, 30000);
+    window.addEventListener("focus", updateTime);
+    document.addEventListener("visibilitychange", updateTime);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener("focus", updateTime);
+      document.removeEventListener("visibilitychange", updateTime);
+    };
+  }, []);
+
+  const timePeriod = getTimePeriod(currentDate);
+
+  // User authentication / profile state
+  const [user, setUser] = useState(() => {
+    try {
+      const saved = localStorage.getItem("ignos_user");
+      if (saved) return JSON.parse(saved);
+    } catch (e) {
+      console.error("Failed to load user from localStorage:", e);
+    }
+    return {
+      name: "Laba",
+      email: "laba@ignos.workspace",
+      role: "Admin User",
+      initials: "LB"
+    };
+  });
+
+  const updateUser = (updates) => {
+    setUser((prev) => {
+      const next = { ...prev, ...updates };
+      if (updates.name !== undefined) {
+        const trimmed = (updates.name || "").trim();
+        const parts = trimmed.split(/\s+/);
+        next.initials = trimmed.length > 0
+          ? (parts.length > 1
+              ? (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+              : trimmed.slice(0, 2).toUpperCase())
+          : "AU";
+      }
+      try {
+        localStorage.setItem("ignos_user", JSON.stringify(next));
+      } catch (e) {
+        console.error("Failed to persist user to localStorage:", e);
+      }
+      return next;
+    });
+  };
+
+  const fallbackUserName = language === "id" ? "Pengguna Admin" : "Admin User";
+  const currentUserName = (user && user.name && user.name.trim()) ? user.name.trim() : fallbackUserName;
+
+  const getGreeting = (overrideDate = null, overrideName = null) => {
+    const targetDate = overrideDate || currentDate;
+    const period = getTimePeriod(targetDate);
+    const targetUser = overrideName !== null ? overrideName : currentUserName;
+    return t(`dashboard.greetings.${period}`, { user: targetUser });
+  };
+
   const t = (path, fallbackOrVars = "", vars = null) => {
     if (!path) return "";
     const fallback = typeof fallbackOrVars === "string" ? fallbackOrVars : "";
     const variables = typeof fallbackOrVars === "object" && fallbackOrVars !== null ? fallbackOrVars : vars;
+
+    // Dynamic time-aware greeting
+    if (path === "dashboard.greeting") {
+      const period = getTimePeriod(currentDate);
+      const name = (variables && variables.user !== undefined) ? variables.user : currentUserName;
+      return t(`dashboard.greetings.${period}`, { user: name });
+    }
+
+    // Dynamic local today date
+    if (path === "dashboard.todayDate") {
+      const targetDate = (variables && variables.date) ? variables.date : currentDate;
+      return formatLocalDateLong(targetDate, language);
+    }
 
     const keys = path.split(".");
     let current = translations[language] || translations["id"];
@@ -64,35 +146,60 @@ export function WorkspaceProvider({ children }) {
     }
     return result;
   };
+
   // Load state from localStorage or initial defaults
   const [goals, setGoals] = useState(() => {
-    const saved = localStorage.getItem("ignos_goals");
-    return saved ? JSON.parse(saved) : [];
+    try {
+      const saved = localStorage.getItem("ignos_goals");
+      return saved ? JSON.parse(saved) : initialGoals;
+    } catch {
+      return initialGoals;
+    }
   });
 
   const [projects, setProjects] = useState(() => {
-    const saved = localStorage.getItem("ignos_projects");
-    return saved ? JSON.parse(saved) : [];
+    try {
+      const saved = localStorage.getItem("ignos_projects");
+      return saved ? JSON.parse(saved) : initialProjects;
+    } catch {
+      return initialProjects;
+    }
   });
 
   const [tasks, setTasks] = useState(() => {
-    const saved = localStorage.getItem("ignos_tasks");
-    return saved ? JSON.parse(saved) : [];
+    try {
+      const saved = localStorage.getItem("ignos_tasks");
+      return saved ? JSON.parse(saved) : initialTasks;
+    } catch {
+      return initialTasks;
+    }
   });
 
   const [notes, setNotes] = useState(() => {
-    const saved = localStorage.getItem("ignos_notes");
-    return saved ? JSON.parse(saved) : [];
+    try {
+      const saved = localStorage.getItem("ignos_notes");
+      return saved ? JSON.parse(saved) : initialNotes;
+    } catch {
+      return initialNotes;
+    }
   });
 
   const [needsAttention, setNeedsAttention] = useState(() => {
-    const saved = localStorage.getItem("ignos_needs_attention");
-    return saved ? JSON.parse(saved) : [];
+    try {
+      const saved = localStorage.getItem("ignos_needs_attention");
+      return saved ? JSON.parse(saved) : initialNeedsAttention;
+    } catch {
+      return initialNeedsAttention;
+    }
   });
 
   const [activityFeed, setActivityFeed] = useState(() => {
-    const saved = localStorage.getItem("ignos_activity_feed");
-    return saved ? JSON.parse(saved) : [];
+    try {
+      const saved = localStorage.getItem("ignos_activity_feed");
+      return saved ? JSON.parse(saved) : initialActivityFeed;
+    } catch {
+      return initialActivityFeed;
+    }
   });
 
   // UI States
@@ -237,10 +344,10 @@ export function WorkspaceProvider({ children }) {
       subtasks: newTask.subtasks || [],
       activityLog: [
         {
-          author: "LB",
-          authorName: "Laba",
-          action: "created task",
-          time: "Just now",
+          author: user.initials || "LB",
+          authorName: currentUserName,
+          action: language === "id" ? "membuat tugas" : "created task",
+          time: language === "id" ? "Baru saja" : "Just now",
           isUser: true
         }
       ]
@@ -253,7 +360,7 @@ export function WorkspaceProvider({ children }) {
         id: "act-" + Date.now(),
         type: "Tugas Baru",
         description: `Menambahkan tugas: "${newTask.title}"`,
-        time: "Baru saja",
+        time: language === "id" ? "Baru saja" : "Just now",
         color: "bg-primary"
       },
       ...prev
@@ -631,7 +738,14 @@ export function WorkspaceProvider({ children }) {
     activeGoalsCount,
     overdueTasksCount,
     upcomingTasksCount,
-    completedTasksCount
+    completedTasksCount,
+    currentTime: currentDate,
+    currentDate,
+    timePeriod,
+    user,
+    updateUser,
+    currentUserName,
+    getGreeting
   };
 
   return (

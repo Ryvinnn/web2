@@ -594,83 +594,32 @@ export default function ProjectsPage() {
 
           {/* Minimal Stacked Bar Chart matching Stitch screen 4 */}
           <div className="h-44 w-full flex items-end justify-between gap-3 pt-4 px-2">
-            {/* Mon */}
-            <div className="flex-1 flex flex-col items-center gap-2 group">
-              <div className="w-full max-w-[42px] flex flex-col-reverse h-32 rounded-lg bg-surface-container-low overflow-hidden">
-                <div className="w-full bg-surface-container-highest h-[15%]"></div>
-                <div className="w-full bg-secondary h-[20%]"></div>
-                <div className="w-full bg-primary h-[45%]"></div>
-              </div>
-              <span className="font-label-sm text-label-sm text-on-surface-variant group-hover:text-on-surface">
-                {t("common.days.mon")}
-              </span>
-            </div>
-
-            {/* Tue */}
-            <div className="flex-1 flex flex-col items-center gap-2 group">
-              <div className="w-full max-w-[42px] flex flex-col-reverse h-32 rounded-lg bg-surface-container-low overflow-hidden">
-                <div className="w-full bg-surface-container-highest h-[10%]"></div>
-                <div className="w-full bg-secondary h-[35%]"></div>
-                <div className="w-full bg-primary h-[35%]"></div>
-              </div>
-              <span className="font-label-sm text-label-sm text-on-surface-variant group-hover:text-on-surface">
-                {t("common.days.tue")}
-              </span>
-            </div>
-
-            {/* Wed (Today) */}
-            <div className="flex-1 flex flex-col items-center gap-2 group">
-              <div className="w-full max-w-[42px] flex flex-col-reverse h-32 rounded-lg bg-surface-container-low overflow-hidden">
-                <div className="w-full bg-surface-container-highest h-[20%]"></div>
-                <div className="w-full bg-secondary h-[25%]"></div>
-                <div className="w-full bg-primary h-[50%]"></div>
-              </div>
-              <span className="font-label-sm text-label-sm text-primary font-semibold">
-                {t("common.days.wedToday")}
-              </span>
-            </div>
-
-            {/* Thu */}
-            <div className="flex-1 flex flex-col items-center gap-2 group">
-              <div className="w-full max-w-[42px] flex flex-col-reverse h-32 rounded-lg bg-surface-container-low overflow-hidden">
-                <div className="w-full bg-secondary h-[30%]"></div>
-                <div className="w-full bg-primary h-[40%]"></div>
-              </div>
-              <span className="font-label-sm text-label-sm text-on-surface-variant group-hover:text-on-surface">
-                {t("common.days.thu")}
-              </span>
-            </div>
-
-            {/* Fri */}
-            <div className="flex-1 flex flex-col items-center gap-2 group">
-              <div className="w-full max-w-[42px] flex flex-col-reverse h-32 rounded-lg bg-surface-container-low overflow-hidden">
-                <div className="w-full bg-secondary h-[20%]"></div>
-                <div className="w-full bg-primary h-[60%]"></div>
-              </div>
-              <span className="font-label-sm text-label-sm text-on-surface-variant group-hover:text-on-surface">
-                {t("common.days.fri")}
-              </span>
-            </div>
-
-            {/* Sat */}
-            <div className="flex-1 flex flex-col items-center gap-2 group">
-              <div className="w-full max-w-[42px] flex flex-col-reverse h-32 rounded-lg bg-surface-container-low overflow-hidden">
-                <div className="w-full bg-primary h-[25%]"></div>
-              </div>
-              <span className="font-label-sm text-label-sm text-on-surface-variant group-hover:text-on-surface">
-                {t("common.days.sat")}
-              </span>
-            </div>
-
-            {/* Sun */}
-            <div className="flex-1 flex flex-col items-center gap-2 group">
-              <div className="w-full max-w-[42px] flex flex-col-reverse h-32 rounded-lg bg-surface-container-low overflow-hidden">
-                <div className="w-full bg-surface-container-highest h-[20%]"></div>
-              </div>
-              <span className="font-label-sm text-label-sm text-on-surface-variant group-hover:text-on-surface">
-                {t("common.days.sun")}
-              </span>
-            </div>
+            {[
+              { key: "mon", label: t("common.days.mon"), hHigh: "15%", hSec: "20%", hPri: "45%" },
+              { key: "tue", label: t("common.days.tue"), hHigh: "10%", hSec: "35%", hPri: "35%" },
+              { key: "wed", label: t("common.days.wed"), hHigh: "20%", hSec: "25%", hPri: "50%" },
+              { key: "thu", label: t("common.days.thu"), hHigh: "0%", hSec: "30%", hPri: "40%" },
+              { key: "fri", label: t("common.days.fri"), hHigh: "0%", hSec: "20%", hPri: "60%" },
+              { key: "sat", label: t("common.days.sat"), hHigh: "0%", hSec: "0%", hPri: "25%" },
+              { key: "sun", label: t("common.days.sun"), hHigh: "20%", hSec: "0%", hPri: "0%" }
+            ].map((d, idx) => {
+              const todayDayIndex = (new Date().getDay() + 6) % 7; // Mon=0, Sun=6
+              const isToday = idx === todayDayIndex;
+              return (
+                <div key={d.key} className="flex-1 flex flex-col items-center gap-2 group">
+                  <div className="w-full max-w-[42px] flex flex-col-reverse h-32 rounded-lg bg-surface-container-low overflow-hidden">
+                    {d.hHigh !== "0%" && <div className="w-full bg-surface-container-highest" style={{ height: d.hHigh }}></div>}
+                    {d.hSec !== "0%" && <div className="w-full bg-secondary" style={{ height: d.hSec }}></div>}
+                    {d.hPri !== "0%" && <div className="w-full bg-primary" style={{ height: d.hPri }}></div>}
+                  </div>
+                  <span className={`font-label-sm text-label-sm truncate max-w-full text-center ${
+                    isToday ? "text-primary font-semibold" : "text-on-surface-variant group-hover:text-on-surface"
+                  }`}>
+                    {isToday ? `${d.label} (${language === "id" ? "Hari Ini" : "Today"})` : d.label}
+                  </span>
+                </div>
+              );
+            })}
           </div>
         </div>
 
