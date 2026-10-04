@@ -121,6 +121,8 @@ export default function DashboardPage() {
     return { totalPlanned, totalCompleted, percentage };
   }, [activeChartData]);
 
+  const hasPeriodActivity = periodStats.totalPlanned > 0 || periodStats.totalCompleted > 0;
+
   // Quick add task
   const handleQuickAdd = () => {
     openModal("task");
@@ -478,86 +480,111 @@ export default function DashboardPage() {
                     <span className="w-3 h-3 rounded-sm bg-secondary-fixed flex-shrink-0"></span> {t("dashboard.monitoring.plannedTargets")}
                   </span>
                 </div>
-                <span className="font-label-sm text-label-sm text-tertiary bg-tertiary/10 px-2 py-0.5 rounded self-start sm:self-auto flex-shrink-0">
-                  {t("dashboard.monitoring.onTimeAvg", { percentage: periodStats.percentage })}
-                </span>
+                {hasPeriodActivity && (
+                  <span className="font-label-sm text-label-sm text-tertiary bg-tertiary/10 px-2 py-0.5 rounded self-start sm:self-auto flex-shrink-0">
+                    {t("dashboard.monitoring.onTimeAvg", { percentage: periodStats.percentage })}
+                  </span>
+                )}
               </div>
 
-              {/* Pure Inline Bar Chart matching Stitch screen */}
-              <div className="h-56 w-full flex items-end justify-between gap-1 sm:gap-4 md:gap-6 pt-6 pb-2 px-2 sm:px-4 bg-surface-container-low rounded-xl">
-                {activeChartData.map((item) => {
-                  const plannedHeight = item.plannedCount > 0
-                    ? Math.max(12, Math.round((item.plannedCount / maxVal) * 100))
-                    : 0;
-                  const completedHeight = item.completedCount > 0
-                    ? Math.max(12, Math.round((item.completedCount / maxVal) * 100))
-                    : 0;
+              {hasPeriodActivity ? (
+                /* Pure Inline Bar Chart matching Stitch screen */
+                <div className="h-56 w-full flex items-end justify-between gap-1 sm:gap-4 md:gap-6 pt-6 pb-2 px-2 sm:px-4 bg-surface-container-low rounded-xl">
+                  {activeChartData.map((item) => {
+                    const plannedHeight = item.plannedCount > 0
+                      ? Math.max(12, Math.round((item.plannedCount / maxVal) * 100))
+                      : 0;
+                    const completedHeight = item.completedCount > 0
+                      ? Math.max(12, Math.round((item.completedCount / maxVal) * 100))
+                      : 0;
 
-                  return (
-                    <div
-                      key={item.key}
-                      className="flex-1 flex flex-col items-center gap-2 group h-full justify-end min-w-0"
-                    >
-                      {/* Top Indicator: Today / Current Badge or Hover Tooltip */}
-                      <div className="h-5 flex items-center justify-center">
-                        {item.isCurrent ? (
-                          <span
-                            title={`${item.completedCount}/${item.plannedCount}`}
-                            className="px-1 sm:px-1.5 py-0.5 rounded bg-primary text-on-primary text-[9px] sm:text-[10px] font-bold flex-shrink-0 cursor-default"
-                          >
-                            {period === "weekly" ? t("common.today") : t("dashboard.monitoring.thisWeek")}
-                          </span>
-                        ) : (
-                          <div className="font-label-sm text-label-sm text-on-surface-variant opacity-0 group-hover:opacity-100 transition-opacity truncate">
-                            {item.completedCount}/{item.plannedCount}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* 2-bar container matching Stitch styling */}
+                    return (
                       <div
-                        title={`${item.fullLabel || item.label}: ${item.completedCount}/${item.plannedCount}`}
-                        className="w-full max-w-[36px] flex gap-0.5 sm:gap-1 items-end h-40"
+                        key={item.key}
+                        className="flex-1 flex flex-col items-center gap-2 group h-full justify-end min-w-0"
                       >
-                        {/* Planned Targets bar (bg-secondary-fixed) */}
-                        <div
-                          className={`w-1/2 rounded-t-sm transition-all duration-300 ${
-                            item.plannedCount > 0 ? "bg-secondary-fixed" : "bg-transparent"
-                          }`}
-                          style={{ height: `${plannedHeight}%` }}
-                        ></div>
+                        {/* Top Indicator: Today / Current Badge or Hover Tooltip */}
+                        <div className="h-5 flex items-center justify-center">
+                          {item.isCurrent ? (
+                            <span
+                              title={`${item.completedCount}/${item.plannedCount}`}
+                              className="px-1 sm:px-1.5 py-0.5 rounded bg-primary text-on-primary text-[9px] sm:text-[10px] font-bold flex-shrink-0 cursor-default"
+                            >
+                              {period === "weekly" ? t("common.today") : t("dashboard.monitoring.thisWeek")}
+                            </span>
+                          ) : (
+                            <div className="font-label-sm text-label-sm text-on-surface-variant opacity-0 group-hover:opacity-100 transition-opacity truncate">
+                              {item.completedCount}/{item.plannedCount}
+                            </div>
+                          )}
+                        </div>
 
-                        {/* Completed Tasks bar (bg-primary) */}
+                        {/* 2-bar container matching Stitch styling */}
                         <div
-                          className={`w-1/2 rounded-t-sm transition-all duration-300 ${
-                            item.completedCount > 0
-                              ? "bg-primary group-hover:bg-primary-container"
-                              : (item.plannedCount > 0 ? "bg-surface-container rounded-t-sm" : "bg-transparent")
-                          }`}
-                          style={{
-                            height: `${
+                          title={`${item.fullLabel || item.label}: ${item.completedCount}/${item.plannedCount}`}
+                          className="w-full max-w-[36px] flex gap-0.5 sm:gap-1 items-end h-40"
+                        >
+                          {/* Planned Targets bar (bg-secondary-fixed) */}
+                          <div
+                            className={`w-1/2 rounded-t-sm transition-all duration-300 ${
+                              item.plannedCount > 0 ? "bg-secondary-fixed" : "bg-transparent"
+                            }`}
+                            style={{ height: `${plannedHeight}%` }}
+                          ></div>
+
+                          {/* Completed Tasks bar (bg-primary) */}
+                          <div
+                            className={`w-1/2 rounded-t-sm transition-all duration-300 ${
                               item.completedCount > 0
-                                ? completedHeight
-                                : (item.plannedCount > 0 ? 5 : 0)
-                            }%`
-                          }}
-                        ></div>
-                      </div>
+                                ? "bg-primary group-hover:bg-primary-container"
+                                : (item.plannedCount > 0 ? "bg-surface-container rounded-t-sm" : "bg-transparent")
+                            }`}
+                            style={{
+                              height: `${
+                                item.completedCount > 0
+                                  ? completedHeight
+                                  : (item.plannedCount > 0 ? 5 : 0)
+                              }%`
+                            }}
+                          ></div>
+                        </div>
 
-                      {/* Day / Period Label */}
-                      <span
-                        className={`font-label-md text-label-md transition-colors truncate ${
-                          item.isCurrent
-                            ? "font-bold text-primary"
-                            : "text-on-surface-variant group-hover:text-primary"
-                        }`}
-                      >
-                        {item.label}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
+                        {/* Day / Period Label */}
+                        <span
+                          className={`font-label-md text-label-md transition-colors truncate ${
+                            item.isCurrent
+                              ? "font-bold text-primary"
+                              : "text-on-surface-variant group-hover:text-primary"
+                          }`}
+                        >
+                          {item.label}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                /* Empty State when no activity exists in the selected period */
+                <div className="h-56 w-full flex flex-col items-center justify-center p-space-md text-center bg-surface-container-low rounded-xl animate-in fade-in duration-200">
+                  <div className="w-11 h-11 rounded-full bg-surface-container flex items-center justify-center text-on-surface-variant/70 mb-2.5">
+                    <span className="material-symbols-outlined text-[24px]">query_stats</span>
+                  </div>
+                  <h3 className="font-headline-sm text-headline-sm text-on-surface font-semibold mb-1">
+                    {t("dashboard.monitoring.emptyTitle")}
+                  </h3>
+                  <p className="font-body-md text-body-md text-on-surface-variant max-w-sm text-center text-xs sm:text-body-md leading-relaxed">
+                    {t("dashboard.monitoring.emptyDesc")}
+                  </p>
+                  <button
+                    onClick={handleQuickAdd}
+                    type="button"
+                    className="mt-3 px-3.5 py-1.5 rounded-lg bg-surface-container-lowest hover:bg-surface-container text-primary font-label-md text-label-md transition-all shadow-sm flex items-center gap-1.5 border border-surface-container"
+                  >
+                    <span className="material-symbols-outlined text-[16px]">add</span>
+                    <span>{t("dashboard.monitoring.createFirstTask")}</span>
+                  </button>
+                </div>
+              )}
             </div>
           </div>
 

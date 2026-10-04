@@ -566,7 +566,7 @@ export function StatisticsPage() {
 }
 
 export function SettingsPage() {
-  const { language, setLanguage, t, user, updateUser } = useWorkspace();
+  const { language, setLanguage, t, user, updateUser, clearAllTasks, resetDefaultTasks } = useWorkspace();
   const [displayName, setDisplayName] = useState(user?.name || "Laba");
   const [toastMessage, setToastMessage] = useState("");
 
@@ -771,6 +771,37 @@ export function SettingsPage() {
             <span className="px-3 py-1.5 rounded-lg bg-surface-container text-tertiary text-label-md font-medium shadow-xs">
               {t("settings.themeTokens.tertiary")}
             </span>
+          </div>
+        </div>
+
+        {/* Data & Sample Management */}
+        <div className="pt-space-md border-t border-surface-container">
+          <div className="flex items-center gap-space-sm mb-1">
+            <span className="material-symbols-outlined text-primary text-[22px]">database</span>
+            <h3 className="font-headline-md text-headline-md text-on-surface">
+              {t("settings.dataSection")}
+            </h3>
+          </div>
+          <p className="text-body-sm text-on-surface-variant mb-4">
+            {t("settings.dataDesc")}
+          </p>
+          <div className="flex flex-wrap items-center gap-space-md">
+            <button
+              type="button"
+              onClick={clearAllTasks}
+              className="px-space-lg py-2 rounded-lg bg-surface-container text-error hover:bg-error-container/20 font-label-md text-label-md transition-colors flex items-center gap-1.5 border border-surface-container cursor-pointer"
+            >
+              <span className="material-symbols-outlined text-[18px]">delete_sweep</span>
+              <span>{t("settings.clearTasksBtn")}</span>
+            </button>
+            <button
+              type="button"
+              onClick={resetDefaultTasks}
+              className="px-space-lg py-2 rounded-lg bg-surface-container-low hover:bg-surface-container text-on-surface font-label-md text-label-md transition-colors flex items-center gap-1.5 border border-surface-container cursor-pointer"
+            >
+              <span className="material-symbols-outlined text-[18px]">restore</span>
+              <span>{t("settings.resetTasksBtn")}</span>
+            </button>
           </div>
         </div>
 

@@ -106,7 +106,11 @@ export const translations = {
         primary: "Biru Utama (#004AC6)",
         secondary: "Sekunder (#DAE2FD)",
         tertiary: "Tersier (#006242)"
-      }
+      },
+      dataSection: "Manajemen Data & Sampel",
+      dataDesc: "Kelola data aktivitas tugas untuk pengujian ruang kerja atau akun baru.",
+      clearTasksBtn: "Kosongkan Semua Tugas",
+      resetTasksBtn: "Muat Ulang Data Sampel"
     },
     projects: {
       tag: "Teknik & Sasaran",
@@ -191,7 +195,10 @@ export const translations = {
         tasksCompleted: "Tugas Selesai",
         plannedTargets: "Target Terencana",
         onTimeAvg: "Rata-rata {percentage}% Tepat Waktu",
-        thisWeek: "Pekan ini"
+        thisWeek: "Pekan ini",
+        emptyTitle: "Belum ada aktivitas",
+        emptyDesc: "Belum ada aktivitas yang tercatat pada periode ini.",
+        createFirstTask: "Tambahkan tugas pertama"
       },
       currentGoalsTitle: "Target Utama (Current Goals)",
       viewAllGoals: "Lihat semua target",
@@ -603,7 +610,11 @@ export const translations = {
         primary: "Primary Blue (#004AC6)",
         secondary: "Secondary (#DAE2FD)",
         tertiary: "Tertiary (#006242)"
-      }
+      },
+      dataSection: "Data & Sample Management",
+      dataDesc: "Manage task activity data for workspace testing or fresh account simulation.",
+      clearTasksBtn: "Clear All Tasks",
+      resetTasksBtn: "Reload Sample Tasks"
     },
     projects: {
       tag: "Engineering & Goals",
@@ -688,7 +699,10 @@ export const translations = {
         tasksCompleted: "Tasks Completed",
         plannedTargets: "Planned Targets",
         onTimeAvg: "Average {percentage}% On-Time",
-        thisWeek: "This Week"
+        thisWeek: "This Week",
+        emptyTitle: "No activity yet",
+        emptyDesc: "No activity has been recorded for this period.",
+        createFirstTask: "Create your first task"
       },
       currentGoalsTitle: "Strategic Goals (Current Goals)",
       viewAllGoals: "View all goals",

@@ -412,6 +412,18 @@ export function WorkspaceProvider({ children }) {
     showToast(language === "id" ? `✓ Tugas "${target?.title || ''}" telah dihapus` : `✓ Task "${target?.title || ''}" deleted`, "info");
   };
 
+  const clearAllTasks = () => {
+    setTasks([]);
+    localStorage.setItem("ignos_tasks", "[]");
+    showToast(language === "id" ? "Semua tugas telah dikosongkan" : "All tasks have been cleared", "info");
+  };
+
+  const resetDefaultTasks = () => {
+    setTasks(initialTasks);
+    localStorage.setItem("ignos_tasks", JSON.stringify(initialTasks));
+    showToast(language === "id" ? "Data sampel tugas berhasil dimuat ulang" : "Sample tasks reloaded successfully");
+  };
+
   const rescheduleOverdueTasks = () => {
     setTasks((prev) =>
       prev.map((t) =>
@@ -742,6 +754,8 @@ export function WorkspaceProvider({ children }) {
     addTask,
     updateTask,
     deleteTask,
+    clearAllTasks,
+    resetDefaultTasks,
     rescheduleOverdueTasks,
     toggleSubtask,
     addSubtask,
