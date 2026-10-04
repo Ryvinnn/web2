@@ -1,0 +1,650 @@
+import React, { createContext, useContext, useState, useEffect } from "react";
+import {
+  initialGoals,
+  initialProjects,
+  initialTasks,
+  initialNeedsAttention,
+  initialActivityFeed,
+  initialNotes
+} from "../data/mockData";
+import { translations } from "../utils/translations";
+
+const WorkspaceContext = createContext(null);
+
+export function WorkspaceProvider({ children }) {
+  // Language state ('id' or 'en')
+  const [language, setLanguageState] = useState(() => {
+    return localStorage.getItem("ignos_language") || "id";
+  });
+
+  const setLanguage = (lang) => {
+    setLanguageState(lang);
+    localStorage.setItem("ignos_language", lang);
+  };
+
+  useEffect(() => {
+    document.documentElement.lang = language;
+  }, [language]);
+
+  const t = (path, fallbackOrVars = "", vars = null) => {
+    if (!path) return "";
+    const fallback = typeof fallbackOrVars === "string" ? fallbackOrVars : "";
+    const variables = typeof fallbackOrVars === "object" && fallbackOrVars !== null ? fallbackOrVars : vars;
+
+    const keys = path.split(".");
+    let current = translations[language] || translations["id"];
+    let found = true;
+    for (const k of keys) {
+      if (!current || current[k] === undefined) {
+        found = false;
+        break;
+      }
+      current = current[k];
+    }
+
+    let result = found && current !== undefined ? current : null;
+    if (result === null) {
+      // Fallback to id dictionary
+      let fb = translations["id"] || {};
+      let fbFound = true;
+      for (const sub of keys) {
+        if (!fb || fb[sub] === undefined) {
+          fbFound = false;
+          break;
+        }
+        fb = fb[sub];
+      }
+      result = fbFound && fb !== undefined ? fb : (fallback || path);
+    }
+
+    if (variables && typeof result === "string") {
+      for (const [vKey, vVal] of Object.entries(variables)) {
+        result = result.replace(new RegExp(`\\{${vKey}\\}`, "g"), String(vVal));
+      }
+    }
+    return result;
+  };
+  // Load state from localStorage or initial defaults
+  const [goals, setGoals] = useState(() => {
+    const saved = localStorage.getItem("ignos_goals");
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  const [projects, setProjects] = useState(() => {
+    const saved = localStorage.getItem("ignos_projects");
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  const [tasks, setTasks] = useState(() => {
+    const saved = localStorage.getItem("ignos_tasks");
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  const [notes, setNotes] = useState(() => {
+    const saved = localStorage.getItem("ignos_notes");
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  const [needsAttention, setNeedsAttention] = useState(() => {
+    const saved = localStorage.getItem("ignos_needs_attention");
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  const [activityFeed, setActivityFeed] = useState(() => {
+    const saved = localStorage.getItem("ignos_activity_feed");
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  // UI States
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [globalSearchModalOpen, setGlobalSearchModalOpen] = useState(false);
+  const [toast, setToast] = useState(null); // { message, type: 'success' | 'info' | 'error' }
+
+  const showToast = (message, type = "success") => {
+    setToast({ message, type });
+    setTimeout(() => {
+      setToast(null);
+    }, 3500);
+  };
+
+  const toggleSidebar = () => setSidebarOpen((prev) => !prev);
+  const closeSidebar = () => setSidebarOpen(false);
+
+  // Notifications list with unread state
+  const [notifications, setNotifications] = useState(() => {
+    return [];
+  });
+
+  const unreadNotificationsCount = notifications.filter((n) => !n.read).length;
+
+  const markAllNotificationsRead = () => {
+    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+    showToast(t("common.savedSuccess") || "Notifikasi telah ditandai dibaca");
+  };
+
+  // Selected task in Tasks inspector drawer
+  const [selectedTaskId, setSelectedTaskId] = useState(null);
+
+  // Global search input
+  const [globalSearch, setGlobalSearch] = useState("");
+
+  // Global Create Modal state
+  const [modalState, setModalState] = useState({
+    isOpen: false,
+    type: "task", // 'task' | 'goal' | 'project' | 'note'
+    initialData: null
+  });
+
+  // Project detail modal state
+  const [projectModalState, setProjectModalState] = useState({
+    isOpen: false,
+    projectKey: "ignos"
+  });
+
+  // Sync to localStorage
+  useEffect(() => {
+    localStorage.setItem("ignos_goals", JSON.stringify(goals));
+  }, [goals]);
+
+  useEffect(() => {
+    localStorage.setItem("ignos_projects", JSON.stringify(projects));
+  }, [projects]);
+
+  useEffect(() => {
+    localStorage.setItem("ignos_tasks", JSON.stringify(tasks));
+  }, [tasks]);
+
+  useEffect(() => {
+    localStorage.setItem("ignos_notes", JSON.stringify(notes));
+  }, [notes]);
+
+  // Task actions
+  const toggleTask = (taskId) => {
+    let affectedProjectId = null;
+    let willBeCompleted = false;
+
+    setTasks((prev) =>
+      prev.map((t) => {
+        if (t.id === taskId) {
+          const nextCompleted = !t.completed;
+          willBeCompleted = nextCompleted;
+          affectedProjectId = t.projectId || t.project;
+          return {
+            ...t,
+            completed: nextCompleted,
+            timeTag: nextCompleted ? (language === "id" ? "Baru Selesai" : "Completed Just Now") : t.timeTag
+          };
+        }
+        return t;
+      })
+    );
+
+    if (affectedProjectId) {
+      setProjects((prev) =>
+        prev.map((p) => {
+          if (
+            p.id === affectedProjectId ||
+            p.key === affectedProjectId ||
+            p.title === affectedProjectId ||
+            (p.title && affectedProjectId && p.title.toLowerCase().includes(String(affectedProjectId).toLowerCase()))
+          ) {
+            const nextCompletedTasks = willBeCompleted
+              ? Math.min(p.totalTasks, (p.completedTasks || 0) + 1)
+              : Math.max(0, (p.completedTasks || 0) - 1);
+            const nextProgress = p.totalTasks > 0 ? Math.round((nextCompletedTasks / p.totalTasks) * 100) : p.progress;
+            return {
+              ...p,
+              completedTasks: nextCompletedTasks,
+              progress: nextProgress,
+              status: nextProgress === 100 ? "completed" : (nextProgress > 0 ? "in-progress" : p.status)
+            };
+          }
+          return p;
+        })
+      );
+    }
+  };
+
+  const toggleAllTasks = () => {
+    setTasks((prev) => {
+      const allTodayChecked = prev.filter((t) => t.status === "today").every((t) => t.completed);
+      return prev.map((t) => {
+        if (t.status === "today") {
+          return { ...t, completed: !allTodayChecked };
+        }
+        return t;
+      });
+    });
+    showToast(t("dashboard.todayChecklistTitle"));
+  };
+
+  const addTask = (newTask) => {
+    const item = {
+      id: "t-" + Date.now(),
+      ticket: `IGN-${Math.floor(215 + Math.random() * 50)}`,
+      title: newTask.title,
+      description: newTask.description || "",
+      project: newTask.project || "Ignos SaaS",
+      projectId: newTask.projectId || "p1",
+      goal: newTask.goal || "Fullstack Dev",
+      priority: newTask.priority || "medium",
+      timeTag: newTask.timeTag || "Today",
+      status: newTask.status || "today",
+      completed: false,
+      tag: newTask.tag || "Baru",
+      subtasks: newTask.subtasks || [],
+      activityLog: [
+        {
+          author: "LB",
+          authorName: "Laba",
+          action: "created task",
+          time: "Just now",
+          isUser: true
+        }
+      ]
+    };
+    setTasks((prev) => [item, ...prev]);
+
+    // Add activity
+    setActivityFeed((prev) => [
+      {
+        id: "act-" + Date.now(),
+        type: "Tugas Baru",
+        description: `Menambahkan tugas: "${newTask.title}"`,
+        time: "Baru saja",
+        color: "bg-primary"
+      },
+      ...prev
+    ]);
+
+    showToast(language === "id" ? `✓ Tugas "${newTask.title}" berhasil dibuat!` : `✓ Task "${newTask.title}" created successfully!`);
+    return item;
+  };
+
+  const updateTask = (taskId, updates) => {
+    setTasks((prev) =>
+      prev.map((t) => (t.id === taskId ? { ...t, ...updates } : t))
+    );
+    showToast(language === "id" ? "✓ Tugas berhasil diperbarui!" : "✓ Task updated successfully!");
+  };
+
+  const deleteTask = (taskId) => {
+    const target = tasks.find((t) => t.id === taskId);
+    setTasks((prev) => prev.filter((t) => t.id !== taskId));
+    if (selectedTaskId === taskId) {
+      setSelectedTaskId(null);
+    }
+    showToast(language === "id" ? `✓ Tugas "${target?.title || ''}" telah dihapus` : `✓ Task "${target?.title || ''}" deleted`, "info");
+  };
+
+  const rescheduleOverdueTasks = () => {
+    setTasks((prev) =>
+      prev.map((t) =>
+        t.status === "overdue"
+          ? { ...t, status: "today", timeTag: "Dijadwalkan Ulang (Hari ini)" }
+          : t
+      )
+    );
+    showToast(language === "id" ? "✓ Semua tugas terlewat berhasil dijadwalkan ulang ke Hari Ini!" : "✓ All overdue tasks rescheduled to Today!");
+  };
+
+  const toggleSubtask = (taskId, subtaskId) => {
+    setTasks((prev) =>
+      prev.map((t) => {
+        if (t.id === taskId && t.subtasks) {
+          const updatedSubtasks = t.subtasks.map((st) =>
+            st.id === subtaskId ? { ...st, completed: !st.completed } : st
+          );
+          return { ...t, subtasks: updatedSubtasks };
+        }
+        return t;
+      })
+    );
+  };
+
+  const addSubtask = (taskId, title) => {
+    setTasks((prev) =>
+      prev.map((t) => {
+        if (t.id === taskId) {
+          const subtasks = t.subtasks || [];
+          return {
+            ...t,
+            subtasks: [
+              ...subtasks,
+              { id: "st-" + Date.now(), title, completed: false }
+            ]
+          };
+        }
+        return t;
+      })
+    );
+  };
+
+  const deleteSubtask = (taskId, subtaskId) => {
+    setTasks((prev) =>
+      prev.map((t) => {
+        if (t.id === taskId && Array.isArray(t.subtasks)) {
+          return {
+            ...t,
+            subtasks: t.subtasks.filter((st) => st.id !== subtaskId)
+          };
+        }
+        return t;
+      })
+    );
+  };
+
+  // Goal actions
+  const addGoal = (newGoal) => {
+    const item = {
+      id: "g-" + Date.now(),
+      key: newGoal.title.toLowerCase().replace(/[^a-z0-9]/g, "-"),
+      title: newGoal.title,
+      description: newGoal.description || "",
+      category: newGoal.category || "career",
+      categoryLabel:
+        newGoal.category === "career"
+          ? "Career & Tech"
+          : newGoal.category === "learning"
+          ? "Learning"
+          : newGoal.category === "health"
+          ? "Health & Fitness"
+          : "Personal",
+      priority: newGoal.priority || "medium",
+      deadline: newGoal.deadline || "2026-12-31",
+      deadlineFormatted: newGoal.deadlineFormatted || "Dec 31, 2026",
+      status: newGoal.status || "in_progress",
+      progress: newGoal.progress || 0,
+      milestones: newGoal.milestones || []
+    };
+    setGoals((prev) => [item, ...prev]);
+
+    setActivityFeed((prev) => [
+      {
+        id: "act-" + Date.now(),
+        type: "Target Baru",
+        description: `Target dibuat: "${newGoal.title}"`,
+        time: "Baru saja",
+        color: "bg-tertiary"
+      },
+      ...prev
+    ]);
+
+    showToast(language === "id" ? `✓ Target "${newGoal.title}" berhasil dibuat!` : `✓ Goal "${newGoal.title}" created successfully!`);
+  };
+
+  const updateGoal = (goalId, updates) => {
+    setGoals((prev) =>
+      prev.map((g) => (g.id === goalId ? { ...g, ...updates } : g))
+    );
+    showToast(language === "id" ? "✓ Target berhasil diperbarui!" : "✓ Goal updated successfully!");
+  };
+
+  const deleteGoal = (goalId) => {
+    const target = goals.find((g) => g.id === goalId);
+    setGoals((prev) => prev.filter((g) => g.id !== goalId));
+    showToast(language === "id" ? `✓ Target "${target?.title || ''}" telah dihapus` : `✓ Goal "${target?.title || ''}" deleted`, "info");
+  };
+
+  const toggleMilestone = (goalId, milestoneId) => {
+    setGoals((prev) =>
+      prev.map((g) => {
+        if (g.id === goalId && g.milestones) {
+          const updatedMilestones = g.milestones.map((m) =>
+            m.id === milestoneId ? { ...m, completed: !m.completed } : m
+          );
+          const completedCount = updatedMilestones.filter((m) => m.completed).length;
+          const newProgress = Math.round((completedCount / updatedMilestones.length) * 100);
+          return {
+            ...g,
+            milestones: updatedMilestones,
+            progress: newProgress,
+            status: newProgress === 100 ? "completed" : "in_progress"
+          };
+        }
+        return g;
+      })
+    );
+  };
+
+  const addGoalMilestone = (goalId, title) => {
+    setGoals((prev) =>
+      prev.map((g) => {
+        if (g.id === goalId) {
+          const milestones = g.milestones || [];
+          const updated = [
+            ...milestones,
+            { id: "m-" + Date.now(), title, completed: false, statusText: "Planned" }
+          ];
+          const completedCount = updated.filter((m) => m.completed).length;
+          const newProgress = Math.round((completedCount / updated.length) * 100);
+          return {
+            ...g,
+            milestones: updated,
+            progress: newProgress,
+            status: newProgress === 100 ? "completed" : "in_progress"
+          };
+        }
+        return g;
+      })
+    );
+    showToast(language === "id" ? "✓ Langkah milestone berhasil ditambahkan!" : "✓ Milestone step added!");
+  };
+
+  const deleteGoalMilestone = (goalId, milestoneId) => {
+    setGoals((prev) =>
+      prev.map((g) => {
+        if (g.id === goalId && Array.isArray(g.milestones)) {
+          const updated = g.milestones.filter((m) => m.id !== milestoneId);
+          const completedCount = updated.filter((m) => m.completed).length;
+          const newProgress = updated.length > 0 ? Math.round((completedCount / updated.length) * 100) : 0;
+          return {
+            ...g,
+            milestones: updated,
+            progress: newProgress,
+            status: newProgress === 100 ? "completed" : "in_progress"
+          };
+        }
+        return g;
+      })
+    );
+    showToast(language === "id" ? "✓ Milestone berhasil dihapus" : "✓ Milestone deleted", "info");
+  };
+
+  // Project actions
+  const addProject = (newProject) => {
+    const item = {
+      id: "p-" + Date.now(),
+      key: newProject.title.toLowerCase().replace(/[^a-z0-9]/g, "-"),
+      title: newProject.title,
+      description: newProject.description || "",
+      category: newProject.category || "Web Engineering",
+      linkedGoal: newProject.linkedGoal || "Learn Fullstack Development",
+      techStack: newProject.techStack || ["React", "Tailwind"],
+      progress: 0,
+      completedTasks: 0,
+      totalTasks: 1,
+      deadline: newProject.deadline || "Nov 2026",
+      status: newProject.status || "in-progress",
+      statusLabel: "In Progress",
+      owner: "Alex",
+      milestones: 1,
+      icon: newProject.icon || "hub",
+      gradient: "from-surface-container via-surface-container-high to-secondary-container",
+      coverImage: newProject.coverImage || null,
+      coverImagePosition: newProject.coverImagePosition ?? 50
+    };
+    setProjects((prev) => [item, ...prev]);
+
+    setActivityFeed((prev) => [
+      {
+        id: "act-" + Date.now(),
+        type: "Proyek Baru",
+        description: `Proyek dibuat: "${newProject.title}"`,
+        time: "Baru saja",
+        color: "bg-secondary"
+      },
+      ...prev
+    ]);
+
+    showToast(language === "id" ? `✓ Proyek "${newProject.title}" berhasil dibuat!` : `✓ Project "${newProject.title}" created successfully!`);
+  };
+
+  const updateProject = (projectId, updates) => {
+    setProjects((prev) =>
+      prev.map((p) => (p.id === projectId || p.key === projectId ? { ...p, ...updates } : p))
+    );
+    showToast(language === "id" ? "✓ Proyek berhasil diperbarui!" : "✓ Project updated successfully!");
+  };
+
+  const deleteProject = (projectId) => {
+    const target = projects.find((p) => p.id === projectId || p.key === projectId);
+    setProjects((prev) => prev.filter((p) => p.id !== projectId && p.key !== projectId));
+    showToast(language === "id" ? `✓ Proyek "${target?.title || ''}" telah dihapus` : `✓ Project "${target?.title || ''}" deleted`, "info");
+  };
+
+  // Note actions
+  const addNote = (newNote) => {
+    const item = {
+      id: "n-" + Date.now(),
+      title: newNote.title,
+      category: newNote.category || "General",
+      date: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+      snippet: newNote.snippet || newNote.description || ""
+    };
+    setNotes((prev) => [item, ...prev]);
+    showToast(language === "id" ? `✓ Catatan "${newNote.title}" berhasil disimpan!` : `✓ Note "${newNote.title}" saved successfully!`);
+    return item;
+  };
+
+  const updateNote = (noteId, updates) => {
+    setNotes((prev) =>
+      prev.map((n) => (n.id === noteId ? { ...n, ...updates } : n))
+    );
+    showToast(language === "id" ? "✓ Catatan berhasil diperbarui!" : "✓ Note updated successfully!");
+  };
+
+  const deleteNote = (noteId) => {
+    const target = notes.find((n) => n.id === noteId);
+    setNotes((prev) => prev.filter((n) => n.id !== noteId));
+    showToast(language === "id" ? `✓ Catatan "${target?.title || ''}" telah dihapus` : `✓ Note "${target?.title || ''}" deleted`, "info");
+  };
+
+  // Open modals helper
+  const openModal = (type = "task", initialData = null) => {
+    setModalState({ isOpen: true, type, initialData });
+  };
+
+  const closeModal = () => {
+    setModalState({ isOpen: false, type: "task", initialData: null });
+  };
+
+  const openProjectModal = (projectKey = "ignos") => {
+    setProjectModalState({ isOpen: true, projectKey });
+  };
+
+  const closeProjectModal = () => {
+    setProjectModalState({ isOpen: false, projectKey: "ignos" });
+  };
+
+  // Compute live aggregates
+  const todayTasks = tasks.filter((t) => t.status === "today");
+  const todayCompletedTasks = todayTasks.filter((t) => t.completed);
+  const completionPercentage =
+    todayTasks.length > 0
+      ? Math.round((todayCompletedTasks.length / todayTasks.length) * 100)
+      : 0;
+
+  const activeProjectsCount = projects.filter(
+    (p) => p.status === "in-progress"
+  ).length;
+
+  const activeGoalsCount = goals.filter((g) => g.status === "in_progress").length;
+
+  const overdueTasksCount = tasks.filter((t) => t.status === "overdue").length;
+  const upcomingTasksCount = tasks.filter((t) => t.status === "upcoming").length;
+  const completedTasksCount = tasks.filter((t) => t.completed).length;
+
+  const value = {
+    language,
+    setLanguage,
+    t,
+    goals,
+    projects,
+    tasks,
+    notes,
+    needsAttention,
+    setNeedsAttention,
+    activityFeed,
+    selectedTaskId,
+    setSelectedTaskId,
+    globalSearch,
+    setGlobalSearch,
+    globalSearchModalOpen,
+    setGlobalSearchModalOpen,
+    sidebarOpen,
+    setSidebarOpen,
+    toggleSidebar,
+    closeSidebar,
+    notificationsOpen,
+    setNotificationsOpen,
+    notifications,
+    unreadNotificationsCount,
+    markAllNotificationsRead,
+    userMenuOpen,
+    setUserMenuOpen,
+    toast,
+    showToast,
+    modalState,
+    openModal,
+    closeModal,
+    projectModalState,
+    openProjectModal,
+    closeProjectModal,
+    toggleTask,
+    toggleAllTasks,
+    addTask,
+    updateTask,
+    deleteTask,
+    rescheduleOverdueTasks,
+    toggleSubtask,
+    addSubtask,
+    deleteSubtask,
+    addGoal,
+    updateGoal,
+    deleteGoal,
+    toggleMilestone,
+    addGoalMilestone,
+    deleteGoalMilestone,
+    addProject,
+    updateProject,
+    deleteProject,
+    addNote,
+    updateNote,
+    deleteNote,
+    todayTasks,
+    todayCompletedTasks,
+    completionPercentage,
+    activeProjectsCount,
+    activeGoalsCount,
+    overdueTasksCount,
+    upcomingTasksCount,
+    completedTasksCount
+  };
+
+  return (
+    <WorkspaceContext.Provider value={value}>
+      {children}
+    </WorkspaceContext.Provider>
+  );
+}
+
+export function useWorkspace() {
+  const context = useContext(WorkspaceContext);
+  if (!context) {
+    throw new Error("useWorkspace must be used within a WorkspaceProvider");
+  }
+  return context;
+}
