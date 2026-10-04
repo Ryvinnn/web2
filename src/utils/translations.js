@@ -230,6 +230,9 @@ export const translations = {
       quickAddPrompt: "Ketik task baru untuk hari ini:",
       recentActivityTitle: "Aktivitas Terkini",
       activityToday: "Hari Ini",
+      recentActivityEmptyTitle: "Belum Ada Aktivitas Terbaru",
+      recentActivityEmptyDesc: "Aktivitas penyelesaian tugas, target baru, dan proyek Anda akan tercatat di sini secara otomatis.",
+      recentActivityAddAction: "Buat tugas baru",
       attentionLabels: {
         authTitle: "Selesaikan Autentikasi OAuth",
         authSub: "Terlambat 1 hari",
@@ -749,6 +752,9 @@ export const translations = {
       quickAddPrompt: "Type a new task for today:",
       recentActivityTitle: "Recent Activity",
       activityToday: "Today",
+      recentActivityEmptyTitle: "No Recent Activity Yet",
+      recentActivityEmptyDesc: "Task completions, new goals, and your projects will be recorded here automatically.",
+      recentActivityAddAction: "Create a new task",
       attentionLabels: {
         authTitle: "Complete OAuth Authentication",
         authSub: "1 day overdue",

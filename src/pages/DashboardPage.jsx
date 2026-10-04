@@ -308,25 +308,101 @@ export default function DashboardPage() {
 
   // Helper for translating activity feed items
   const getActivityType = (act) => {
+    if (act.typeKey === "taskCompleted") return language === "id" ? "Tugas Selesai" : "Task Completed";
+    if (act.typeKey === "taskCreated") return language === "id" ? "Tugas Baru" : "New Task";
+    if (act.typeKey === "goalCreated") return language === "id" ? "Target Baru" : "New Goal";
+    if (act.typeKey === "milestoneCompleted") return language === "id" ? "Milestone Tercapai" : "Milestone Achieved";
+    if (act.typeKey === "projectCreated") return language === "id" ? "Proyek Baru" : "New Project";
+    if (act.typeKey === "allTasksCompleted") return language === "id" ? "Checklist Hari Ini Selesai" : "Today's Checklist Completed";
+
     if (act.id === "act-1") return t("dashboard.activityItems.taskCompleted", act.type);
     if (act.id === "act-2") return t("dashboard.activityItems.goalUpdated", act.type);
     if (act.id === "act-3") return t("dashboard.activityItems.attendanceLogged", act.type);
+
+    const lowerType = String(act.type || "").toLowerCase();
+    if (lowerType.includes("tugas selesai") || lowerType.includes("task completed")) {
+      return language === "id" ? "Tugas Selesai" : "Task Completed";
+    }
+    if (lowerType.includes("tugas baru") || lowerType.includes("new task")) {
+      return language === "id" ? "Tugas Baru" : "New Task";
+    }
+    if (lowerType.includes("target baru") || lowerType.includes("new goal")) {
+      return language === "id" ? "Target Baru" : "New Goal";
+    }
+    if (lowerType.includes("target diperbarui") || lowerType.includes("goal updated")) {
+      return language === "id" ? "Target Diperbarui" : "Goal Updated";
+    }
+    if (lowerType.includes("proyek baru") || lowerType.includes("new project")) {
+      return language === "id" ? "Proyek Baru" : "New Project";
+    }
+    if (lowerType.includes("absensi") || lowerType.includes("attendance")) {
+      return language === "id" ? "Absensi Kehadiran Tercatat" : "Attendance Logged";
+    }
     return act.type;
   };
 
   const getActivityDesc = (act) => {
+    if (act.typeKey === "taskCompleted" && act.itemTitle) {
+      return language === "id" ? `Menyelesaikan tugas: "${act.itemTitle}"` : `Completed task: "${act.itemTitle}"`;
+    }
+    if (act.typeKey === "taskCreated" && act.itemTitle) {
+      return language === "id" ? `Menambahkan tugas: "${act.itemTitle}"` : `Added task: "${act.itemTitle}"`;
+    }
+    if (act.typeKey === "goalCreated" && act.itemTitle) {
+      return language === "id" ? `Target dibuat: "${act.itemTitle}"` : `Goal created: "${act.itemTitle}"`;
+    }
+    if (act.typeKey === "milestoneCompleted" && act.itemTitle) {
+      return language === "id" ? `Langkah milestone tercapai: "${act.itemTitle}"` : `Milestone step achieved: "${act.itemTitle}"`;
+    }
+    if (act.typeKey === "projectCreated" && act.itemTitle) {
+      return language === "id" ? `Proyek dibuat: "${act.itemTitle}"` : `Project created: "${act.itemTitle}"`;
+    }
+    if (act.typeKey === "allTasksCompleted") {
+      return language === "id" ? "Menandai seluruh tugas hari ini selesai." : "Marked all today's tasks as completed.";
+    }
+
     if (act.id === "act-1") return t("dashboard.activityItems.taskCompletedDesc", act.description);
     if (act.id === "act-2") return t("dashboard.activityItems.goalUpdatedDesc", act.description);
     if (act.id === "act-3") return t("dashboard.activityItems.attendanceLoggedDesc", act.description);
+
+    const lowerDesc = String(act.description || "");
+    const match = lowerDesc.match(/["']([^"']+)["']/);
+    const titleInQuotes = match ? match[1] : "";
+    if (titleInQuotes) {
+      if (lowerDesc.includes("menyelesaikan tugas") || lowerDesc.includes("completed task")) {
+        return language === "id" ? `Menyelesaikan tugas: "${titleInQuotes}"` : `Completed task: "${titleInQuotes}"`;
+      }
+      if (lowerDesc.includes("menambahkan tugas") || lowerDesc.includes("added task")) {
+        return language === "id" ? `Menambahkan tugas: "${titleInQuotes}"` : `Added task: "${titleInQuotes}"`;
+      }
+      if (lowerDesc.includes("target dibuat") || lowerDesc.includes("goal created")) {
+        return language === "id" ? `Target dibuat: "${titleInQuotes}"` : `Goal created: "${titleInQuotes}"`;
+      }
+      if (lowerDesc.includes("proyek dibuat") || lowerDesc.includes("project created")) {
+        return language === "id" ? `Proyek dibuat: "${titleInQuotes}"` : `Project created: "${titleInQuotes}"`;
+      }
+    }
+
     return act.description;
   };
 
   const getActivityTime = (act) => {
-    if (act.id === "act-1") return language === "id" ? `2 ${t("common.hoursAgo")}` : "2 hours ago";
-    if (act.id === "act-2") return language === "id" ? `4 ${t("common.hoursAgo")}` : "4 hours ago";
+    if (act.id === "act-1") return language === "id" ? "2 jam yang lalu" : "2 hours ago";
+    if (act.id === "act-2") return language === "id" ? "4 jam yang lalu" : "4 hours ago";
     if (act.id === "act-3") return language === "id" ? "08:55" : "08:55 AM";
-    if (act.time === "Baru saja" || act.time === "Just now") {
-      return t("common.justNow");
+    const lowerTime = String(act.time || "").toLowerCase();
+    if (lowerTime.includes("baru saja") || lowerTime.includes("just now")) {
+      return language === "id" ? "Baru saja" : "Just now";
+    }
+    if (lowerTime.includes("jam yang lalu") || lowerTime.includes("hours ago") || lowerTime.includes("hour ago")) {
+      const numMatch = lowerTime.match(/\d+/);
+      const hours = numMatch ? numMatch[0] : "1";
+      return language === "id" ? `${hours} jam yang lalu` : `${hours} hour${hours > 1 ? "s" : ""} ago`;
+    }
+    if (lowerTime.includes("menit yang lalu") || lowerTime.includes("mins ago") || lowerTime.includes("minutes ago")) {
+      const numMatch = lowerTime.match(/\d+/);
+      const mins = numMatch ? numMatch[0] : "1";
+      return language === "id" ? `${mins} menit yang lalu` : `${mins} min${mins > 1 ? "s" : ""} ago`;
     }
     return act.time;
   };
@@ -1055,29 +1131,53 @@ export default function DashboardPage() {
                   {t("dashboard.recentActivityTitle")}
                 </h3>
               </div>
-              <span className="font-label-sm text-label-sm text-on-surface-variant">
-                {t("dashboard.activityToday")}
-              </span>
+              {activityFeed.length > 0 && (
+                <span className="font-label-sm text-label-sm text-on-surface-variant">
+                  {t("dashboard.activityToday")}
+                </span>
+              )}
             </div>
 
-            <div className="relative pl-6 flex flex-col gap-space-md before:content-[''] before:absolute before:left-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-surface-container">
-              {activityFeed.map((act) => (
-                <div key={act.id} className="relative flex flex-col">
-                  <span
-                    className={`absolute -left-[27px] top-1 w-2.5 h-2.5 rounded-full ${act.color} ring-4 ring-surface-container-lowest`}
-                  ></span>
-                  <span className="font-label-md text-label-md text-on-surface font-semibold">
-                    {getActivityType(act)}
-                  </span>
-                  <p className="font-body-sm text-body-sm text-on-surface-variant">
-                    {getActivityDesc(act)}
-                  </p>
-                  <span className="font-label-sm text-label-sm text-on-surface-variant mt-0.5">
-                    {getActivityTime(act)}
-                  </span>
+            {activityFeed.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-8 px-4 text-center rounded-lg bg-surface-container-low/50 border border-dashed border-outline-variant/40">
+                <div className="w-10 h-10 rounded-full bg-surface-container-high flex items-center justify-center text-on-surface-variant mb-2">
+                  <span className="material-symbols-outlined text-[22px]">history</span>
                 </div>
-              ))}
-            </div>
+                <span className="font-label-md text-label-md font-semibold text-on-surface mb-1">
+                  {t("dashboard.recentActivityEmptyTitle")}
+                </span>
+                <p className="font-body-sm text-body-sm text-on-surface-variant max-w-xs mb-3">
+                  {t("dashboard.recentActivityEmptyDesc")}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => openModal("task")}
+                  className="px-3 py-1.5 rounded-lg bg-surface-container hover:bg-surface-container-high text-primary font-label-sm text-label-sm font-medium flex items-center gap-1.5 transition-colors shadow-sm"
+                >
+                  <span className="material-symbols-outlined text-[16px]">add</span>
+                  <span>{t("dashboard.recentActivityAddAction")}</span>
+                </button>
+              </div>
+            ) : (
+              <div className="relative pl-6 flex flex-col gap-space-md before:content-[''] before:absolute before:left-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-surface-container">
+                {activityFeed.map((act) => (
+                  <div key={act.id} className="relative flex flex-col">
+                    <span
+                      className={`absolute -left-[27px] top-1 w-2.5 h-2.5 rounded-full ${act.color || "bg-primary"} ring-4 ring-surface-container-lowest`}
+                    ></span>
+                    <span className="font-label-md text-label-md text-on-surface font-semibold">
+                      {getActivityType(act)}
+                    </span>
+                    <p className="font-body-sm text-body-sm text-on-surface-variant">
+                      {getActivityDesc(act)}
+                    </p>
+                    <span className="font-label-sm text-label-sm text-on-surface-variant mt-0.5">
+                      {getActivityTime(act)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>

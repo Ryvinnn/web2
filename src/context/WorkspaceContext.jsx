@@ -214,7 +214,15 @@ export function WorkspaceProvider({ children }) {
   const [activityFeed, setActivityFeed] = useState(() => {
     try {
       const saved = localStorage.getItem("ignos_activity_feed");
-      return saved ? JSON.parse(saved) : initialActivityFeed;
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          return parsed.filter(
+            (act) => act.id !== "act-1" && act.id !== "act-2" && act.id !== "act-3"
+          );
+        }
+      }
+      return initialActivityFeed;
     } catch {
       return initialActivityFeed;
     }
@@ -336,13 +344,36 @@ export function WorkspaceProvider({ children }) {
         })
       );
     }
+
+    const targetTask = tasks.find((t) => t.id === taskId);
+    if (targetTask && !targetTask.completed) {
+      setActivityFeed((prev) => [
+        {
+          id: "act-" + Date.now(),
+          typeKey: "taskCompleted",
+          itemTitle: targetTask.title,
+          type: language === "id" ? "Tugas Selesai" : "Task Completed",
+          description: language === "id" ? `Menyelesaikan tugas: "${targetTask.title}"` : `Completed task: "${targetTask.title}"`,
+          time: language === "id" ? "Baru saja" : "Just now",
+          date: todayISO,
+          color: "bg-primary"
+        },
+        ...prev
+      ]);
+    } else if (targetTask && targetTask.completed) {
+      setActivityFeed((prev) =>
+        prev.filter((a) => !(a.typeKey === "taskCompleted" && a.itemTitle === targetTask.title))
+      );
+    }
   };
 
   const toggleAllTasks = () => {
     const todayISO = formatLocalDateToISO(currentDate);
+    let nextCompletedState = false;
     setTasks((prev) => {
       const allTodayChecked = prev.filter((t) => t.status === "today").every((t) => t.completed);
       const nextCompleted = !allTodayChecked;
+      nextCompletedState = nextCompleted;
       return prev.map((t) => {
         if (t.status === "today") {
           return {
@@ -354,6 +385,24 @@ export function WorkspaceProvider({ children }) {
         return t;
       });
     });
+
+    if (nextCompletedState) {
+      setActivityFeed((prev) => [
+        {
+          id: "act-" + Date.now(),
+          typeKey: "allTasksCompleted",
+          itemTitle: language === "id" ? "Semua Tugas Hari Ini" : "All Today Tasks",
+          type: language === "id" ? "Checklist Hari Ini Selesai" : "Today's Checklist Completed",
+          description: language === "id" ? "Menandai seluruh tugas hari ini selesai." : "Marked all today's tasks as completed.",
+          time: language === "id" ? "Baru saja" : "Just now",
+          date: todayISO,
+          color: "bg-primary"
+        },
+        ...prev
+      ]);
+    } else {
+      setActivityFeed((prev) => prev.filter((a) => a.typeKey !== "allTasksCompleted"));
+    }
     showToast(t("dashboard.todayChecklistTitle"));
   };
 
@@ -393,6 +442,8 @@ export function WorkspaceProvider({ children }) {
     setActivityFeed((prev) => [
       {
         id: "act-" + Date.now(),
+        typeKey: "taskCreated",
+        itemTitle: newTask.title,
         type: language === "id" ? "Tugas Baru" : "New Task",
         description: language === "id" ? `Menambahkan tugas: "${newTask.title}"` : `Added task: "${newTask.title}"`,
         time: language === "id" ? "Baru saja" : "Just now",
@@ -408,6 +459,26 @@ export function WorkspaceProvider({ children }) {
 
   const updateTask = (taskId, updates) => {
     const todayISO = formatLocalDateToISO(currentDate);
+    const targetTask = tasks.find((t) => t.id === taskId);
+    if (targetTask && updates.completed === true && !targetTask.completed) {
+      setActivityFeed((prev) => [
+        {
+          id: "act-" + Date.now(),
+          typeKey: "taskCompleted",
+          itemTitle: updates.title || targetTask.title,
+          type: language === "id" ? "Tugas Selesai" : "Task Completed",
+          description: language === "id" ? `Menyelesaikan tugas: "${updates.title || targetTask.title}"` : `Completed task: "${updates.title || targetTask.title}"`,
+          time: language === "id" ? "Baru saja" : "Just now",
+          date: todayISO,
+          color: "bg-primary"
+        },
+        ...prev
+      ]);
+    } else if (targetTask && updates.completed === false && targetTask.completed) {
+      setActivityFeed((prev) =>
+        prev.filter((a) => !(a.typeKey === "taskCompleted" && a.itemTitle === targetTask.title))
+      );
+    }
     setTasks((prev) =>
       prev.map((t) => {
         if (t.id === taskId) {
@@ -429,19 +500,26 @@ export function WorkspaceProvider({ children }) {
     if (selectedTaskId === taskId) {
       setSelectedTaskId(null);
     }
+    if (target?.title) {
+      setActivityFeed((prev) => prev.filter((a) => a.itemTitle !== target.title));
+    }
     showToast(language === "id" ? `✓ Tugas "${target?.title || ''}" telah dihapus` : `✓ Task "${target?.title || ''}" deleted`, "info");
   };
 
   const clearAllTasks = () => {
     setTasks([]);
+    setActivityFeed([]);
     localStorage.setItem("ignos_tasks", "[]");
-    showToast(language === "id" ? "Semua tugas telah dikosongkan" : "All tasks have been cleared", "info");
+    localStorage.setItem("ignos_activity_feed", "[]");
+    showToast(language === "id" ? "Semua tugas dan aktivitas telah dikosongkan" : "All tasks and activities cleared", "info");
   };
 
   const resetDefaultTasks = () => {
     setTasks(initialTasks);
+    setActivityFeed(initialActivityFeed);
     localStorage.setItem("ignos_tasks", JSON.stringify(initialTasks));
-    showToast(language === "id" ? "Data sampel tugas berhasil dimuat ulang" : "Sample tasks reloaded successfully");
+    localStorage.setItem("ignos_activity_feed", JSON.stringify(initialActivityFeed));
+    showToast(language === "id" ? "Data sampel berhasil dimuat ulang" : "Sample data reloaded successfully");
   };
 
   const rescheduleOverdueTasks = () => {
@@ -529,9 +607,11 @@ export function WorkspaceProvider({ children }) {
     setActivityFeed((prev) => [
       {
         id: "act-" + Date.now(),
-        type: "Target Baru",
-        description: `Target dibuat: "${newGoal.title}"`,
-        time: "Baru saja",
+        typeKey: "goalCreated",
+        itemTitle: newGoal.title,
+        type: language === "id" ? "Target Baru" : "New Goal",
+        description: language === "id" ? `Target dibuat: "${newGoal.title}"` : `Goal created: "${newGoal.title}"`,
+        time: language === "id" ? "Baru saja" : "Just now",
         date: formatLocalDateToISO(currentDate),
         color: "bg-tertiary"
       },
@@ -551,6 +631,9 @@ export function WorkspaceProvider({ children }) {
   const deleteGoal = (goalId) => {
     const target = goals.find((g) => g.id === goalId);
     setGoals((prev) => prev.filter((g) => g.id !== goalId));
+    if (target?.title) {
+      setActivityFeed((prev) => prev.filter((a) => a.itemTitle !== target.title));
+    }
     showToast(language === "id" ? `✓ Target "${target?.title || ''}" telah dihapus` : `✓ Goal "${target?.title || ''}" deleted`, "info");
   };
 
@@ -558,9 +641,39 @@ export function WorkspaceProvider({ children }) {
     setGoals((prev) =>
       prev.map((g) => {
         if (g.id === goalId && g.milestones) {
-          const updatedMilestones = g.milestones.map((m) =>
-            m.id === milestoneId ? { ...m, completed: !m.completed } : m
-          );
+          let newlyCompletedMilestone = null;
+          let uncheckedMilestone = null;
+          const updatedMilestones = g.milestones.map((m) => {
+            if (m.id === milestoneId) {
+              const nextVal = !m.completed;
+              if (nextVal) {
+                newlyCompletedMilestone = m;
+              } else {
+                uncheckedMilestone = m;
+              }
+              return { ...m, completed: nextVal };
+            }
+            return m;
+          });
+          if (newlyCompletedMilestone) {
+            setActivityFeed((prevFeed) => [
+              {
+                id: "act-" + Date.now(),
+                typeKey: "milestoneCompleted",
+                itemTitle: newlyCompletedMilestone.title,
+                type: language === "id" ? "Milestone Tercapai" : "Milestone Achieved",
+                description: language === "id" ? `Langkah milestone tercapai: "${newlyCompletedMilestone.title}"` : `Milestone step achieved: "${newlyCompletedMilestone.title}"`,
+                time: language === "id" ? "Baru saja" : "Just now",
+                date: formatLocalDateToISO(currentDate),
+                color: "bg-tertiary"
+              },
+              ...prevFeed
+            ]);
+          } else if (uncheckedMilestone) {
+            setActivityFeed((prevFeed) =>
+              prevFeed.filter((a) => !(a.typeKey === "milestoneCompleted" && a.itemTitle === uncheckedMilestone.title))
+            );
+          }
           const completedCount = updatedMilestones.filter((m) => m.completed).length;
           const newProgress = Math.round((completedCount / updatedMilestones.length) * 100);
           return {
@@ -647,9 +760,11 @@ export function WorkspaceProvider({ children }) {
     setActivityFeed((prev) => [
       {
         id: "act-" + Date.now(),
-        type: "Proyek Baru",
-        description: `Proyek dibuat: "${newProject.title}"`,
-        time: "Baru saja",
+        typeKey: "projectCreated",
+        itemTitle: newProject.title,
+        type: language === "id" ? "Proyek Baru" : "New Project",
+        description: language === "id" ? `Proyek dibuat: "${newProject.title}"` : `Project created: "${newProject.title}"`,
+        time: language === "id" ? "Baru saja" : "Just now",
         date: formatLocalDateToISO(currentDate),
         color: "bg-secondary"
       },
@@ -669,6 +784,9 @@ export function WorkspaceProvider({ children }) {
   const deleteProject = (projectId) => {
     const target = projects.find((p) => p.id === projectId || p.key === projectId);
     setProjects((prev) => prev.filter((p) => p.id !== projectId && p.key !== projectId));
+    if (target?.title) {
+      setActivityFeed((prev) => prev.filter((a) => a.itemTitle !== target.title));
+    }
     showToast(language === "id" ? `✓ Proyek "${target?.title || ''}" telah dihapus` : `✓ Project "${target?.title || ''}" deleted`, "info");
   };
 

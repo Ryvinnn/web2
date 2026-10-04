@@ -477,29 +477,7 @@ export const initialNeedsAttention = [
   }
 ];
 
-export const initialActivityFeed = [
-  {
-    id: "act-1",
-    type: "Tugas Selesai",
-    description: "Menyelesaikan pembuatan migrasi database schema.",
-    time: "2 jam yang lalu",
-    color: "bg-primary"
-  },
-  {
-    id: "act-2",
-    type: "Target Diperbarui",
-    description: 'Menambahkan 2 milestone baru pada proyek "Fullstack Mastery".',
-    time: "4 jam yang lalu",
-    color: "bg-tertiary"
-  },
-  {
-    id: "act-3",
-    type: "Absensi Kehadiran Tercatat",
-    description: "Check-in jam 08:55 dari lokasi Kantor Studio.",
-    time: "08:55",
-    color: "bg-secondary"
-  }
-];
+export const initialActivityFeed = [];
 
 export const initialNotes = [
   {
