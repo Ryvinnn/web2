@@ -24,9 +24,17 @@ export default function GoalsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [sortBy, setSortBy] = useState("progress");
-  const [selectedGoalId, setSelectedGoalId] = useState(goals[0]?.id || "g1");
+  const [selectedGoalId, setSelectedGoalId] = useState(goals[0]?.id || null);
   const [newStepTitle, setNewStepTitle] = useState("");
   const [addingStep, setAddingStep] = useState(false);
+
+  useEffect(() => {
+    if (goals.length > 0 && (!selectedGoalId || !goals.some((g) => g.id === selectedGoalId))) {
+      setSelectedGoalId(goals[0].id);
+    } else if (goals.length === 0 && selectedGoalId !== null) {
+      setSelectedGoalId(null);
+    }
+  }, [goals, selectedGoalId]);
 
   // Helper for flexible date parsing
   const parseAnyDate = (dateVal) => {
@@ -485,18 +493,28 @@ export default function GoalsPage() {
                 <span className="material-symbols-outlined text-[16px] text-primary">link</span> {t("goals.linkedProjects")}
               </span>
               <div className="flex flex-wrap items-center gap-space-xs">
-                <Link
-                  to="/projects"
-                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-surface-container-lowest text-on-surface hover:text-primary transition-colors text-label-md font-label-md shadow-xs"
-                >
-                  <span className="w-2 h-2 rounded-full bg-tertiary"></span> Personal Portfolio
-                </Link>
-                <Link
-                  to="/projects"
-                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-surface-container-lowest text-on-surface hover:text-primary transition-colors text-label-md font-label-md shadow-xs"
-                >
-                  <span className="w-2 h-2 rounded-full bg-primary"></span> Suru Attendance SaaS
-                </Link>
+                {Array.isArray(heroGoal.linkedProjects) && heroGoal.linkedProjects.length > 0 ? (
+                  heroGoal.linkedProjects.map((proj, pIdx) => (
+                    <Link
+                      key={pIdx}
+                      to="/projects"
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-surface-container-lowest text-on-surface hover:text-primary transition-colors text-label-md font-label-md shadow-xs"
+                    >
+                      <span className="w-2 h-2 rounded-full bg-primary"></span> {typeof proj === "string" ? proj : proj.title || "Project"}
+                    </Link>
+                  ))
+                ) : heroGoal.linkedProjectText ? (
+                  <Link
+                    to="/projects"
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-surface-container-lowest text-on-surface hover:text-primary transition-colors text-label-md font-label-md shadow-xs"
+                  >
+                    <span className="w-2 h-2 rounded-full bg-primary"></span> {heroGoal.linkedProjectText}
+                  </Link>
+                ) : (
+                  <span className="text-label-sm font-label-sm text-on-surface-variant">
+                    {language === "id" ? "Belum terhubung ke proyek" : "No linked projects"}
+                  </span>
+                )}
               </div>
             </div>
 
@@ -867,54 +885,57 @@ export default function GoalsPage() {
           </div>
 
           <div className="flex flex-col gap-space-sm">
-            <div className="flex items-center justify-between p-space-sm rounded-lg bg-surface-container-low">
-              <div className="flex items-center gap-space-sm">
-                <div className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
-                  <span className="material-symbols-outlined text-[18px]">terminal</span>
-                </div>
-                <div className="flex flex-col">
-                  <span className="text-label-md font-label-md text-on-surface font-semibold">
-                    {t("goals.archTitle")}
-                  </span>
-                  <span className="text-label-sm font-label-sm text-on-surface-variant">
-                    {t("goals.archProjectsLinked")}
-                  </span>
-                </div>
+            {goals.filter((g) => g.status === "in_progress" || (Number(g.progress) || 0) < 100).length === 0 ? (
+              <div className="p-space-lg rounded-lg bg-surface-container-low text-center">
+                <span className="font-headline-sm text-headline-sm text-on-surface">
+                  {language === "id" ? "Belum ada target aktif" : "No active goals yet"}
+                </span>
+                <p className="font-body-sm text-body-sm text-on-surface-variant mt-1">
+                  {language === "id" ? "Target aktif yang Anda buat akan muncul di sini." : "Active goals you create will appear here."}
+                </p>
               </div>
-              <span className="text-label-sm font-label-sm text-primary font-semibold">
-                {t("goals.archStatus")}
-              </span>
-            </div>
-
-            <div className="flex items-center justify-between p-space-sm rounded-lg bg-surface-container-low">
-              <div className="flex items-center gap-space-sm">
-                <div className="w-8 h-8 rounded-lg bg-tertiary/10 text-tertiary flex items-center justify-center">
-                  <span className="material-symbols-outlined text-[18px]">fitness_center</span>
-                </div>
-                <div className="flex flex-col">
-                  <span className="text-label-md font-label-md text-on-surface font-semibold">
-                    {t("goals.fitnessTitle")}
-                  </span>
-                  <span className="text-label-sm font-label-sm text-on-surface-variant">
-                    {t("goals.fitnessLog")}
-                  </span>
-                </div>
-              </div>
-              <span className="text-label-sm font-label-sm text-tertiary font-semibold">
-                {t("goals.fitnessStatus")}
-              </span>
-            </div>
+            ) : (
+              goals
+                .filter((g) => g.status === "in_progress" || (Number(g.progress) || 0) < 100)
+                .slice(0, 2)
+                .map((g, idx) => (
+                  <div key={g.id || idx} className="flex items-center justify-between p-space-sm rounded-lg bg-surface-container-low">
+                    <div className="flex items-center gap-space-sm">
+                      <div className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+                        <span className="material-symbols-outlined text-[18px]">
+                          {g.category === "career" ? "terminal" : g.category === "health" ? "fitness_center" : "flag"}
+                        </span>
+                      </div>
+                      <div className="flex flex-col min-w-0">
+                        <span className="text-label-md font-label-md text-on-surface font-semibold truncate">
+                          {g.title}
+                        </span>
+                        <span className="text-label-sm font-label-sm text-on-surface-variant truncate">
+                          {g.categoryLabel || g.category} • {g.progress}%
+                        </span>
+                      </div>
+                    </div>
+                    <span className="text-label-sm font-label-sm text-primary font-semibold whitespace-nowrap ml-2">
+                      {g.status === "completed" ? t("common.completed") : t("common.inProgress")}
+                    </span>
+                  </div>
+                ))
+            )}
           </div>
 
           <div className="p-space-md rounded-lg bg-surface-container flex items-center justify-between">
             <div className="flex items-center gap-space-xs text-on-surface-variant">
               <span className="material-symbols-outlined text-[18px] text-primary">lightbulb</span>
-              <span className="text-label-sm font-label-sm">{t("goals.nextMilestoneNote")}</span>
+              <span className="text-label-sm font-label-sm">
+                {goals.length > 0
+                  ? t("goals.nextMilestoneNote")
+                  : (language === "id" ? "Buat target pertama untuk menyusun roadmap eksekusi." : "Create your first goal to structure your execution roadmap.")}
+              </span>
             </div>
             <button
               type="button"
               onClick={() => navigate("/calendar")}
-              className="text-primary hover:text-primary-container text-label-md font-label-md font-semibold"
+              className="text-primary hover:text-primary-container text-label-md font-label-md font-semibold cursor-pointer"
             >
               {t("goals.reviewBtn")}
             </button>

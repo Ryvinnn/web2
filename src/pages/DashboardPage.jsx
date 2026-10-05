@@ -847,43 +847,67 @@ export default function DashboardPage() {
               </Link>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-space-md">
-              {goals.slice(0, 3).map((g) => (
-                <div
-                  key={g.id}
-                  onClick={() => navigate("/goals")}
-                  className="bg-surface-container-low p-space-md rounded-xl flex flex-col justify-between hover:shadow-sm transition-all group cursor-pointer"
-                >
-                  <div>
-                    <div className="flex items-center justify-between mb-space-xs">
-                      <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary font-label-sm text-label-sm font-semibold">
-                        {g.categoryLabel}
-                      </span>
-                      <span className="font-label-sm text-label-sm text-on-surface-variant">
-                        {t("common.due")} {g.deadlineFormatted}
-                      </span>
-                    </div>
-                    <h3 className="font-headline-sm text-headline-sm text-on-surface mb-1 group-hover:text-primary transition-colors line-clamp-1">
-                      {g.title}
-                    </h3>
-                    <p className="font-body-sm text-body-sm text-on-surface-variant mb-space-md line-clamp-2">
-                      {g.description}
-                    </p>
-                  </div>
-                  <div>
-                    <div className="flex items-center justify-between font-label-sm text-label-sm mb-1.5">
-                      <span className="text-on-surface-variant">
-                        {g.doneCount ? `${g.doneCount}/${g.totalCount}` : `${g.milestones?.filter((m) => m.completed).length || 0}/${g.milestones?.length || 0}`} {t("projects.milestonesCount")}
-                      </span>
-                      <span className="font-bold text-primary">{g.progress}%</span>
-                    </div>
-                    <div className="w-full bg-surface-container h-2 rounded-full overflow-hidden">
-                      <div className="bg-primary h-full rounded-full" style={{ width: `${g.progress}%` }}></div>
-                    </div>
-                  </div>
+            {goals.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-8 px-4 text-center rounded-lg bg-surface-container-low/50 border border-dashed border-outline-variant/40">
+                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary mb-2">
+                  <span className="material-symbols-outlined text-[22px]">flag</span>
                 </div>
-              ))}
-            </div>
+                <span className="font-label-md text-label-md font-semibold text-on-surface mb-1">
+                  {language === "id" ? "Belum Ada Target" : "No Goals Yet"}
+                </span>
+                <p className="font-body-sm text-body-sm text-on-surface-variant max-w-xs mb-3">
+                  {language === "id"
+                    ? "Tetapkan target strategis Anda untuk mulai melacak pencapaian dan progres."
+                    : "Set your strategic goals to start tracking achievements and progress."}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => openModal("goal")}
+                  className="px-3 py-1.5 rounded-lg bg-surface-container hover:bg-surface-container-high text-primary font-label-sm text-label-sm font-medium flex items-center gap-1.5 transition-colors shadow-sm cursor-pointer"
+                >
+                  <span className="material-symbols-outlined text-[16px]">add</span>
+                  <span>{language === "id" ? "Buat Target Baru" : "Create New Goal"}</span>
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-space-md">
+                {goals.slice(0, 3).map((g) => (
+                  <div
+                    key={g.id}
+                    onClick={() => navigate("/goals")}
+                    className="bg-surface-container-low p-space-md rounded-xl flex flex-col justify-between hover:shadow-sm transition-all group cursor-pointer"
+                  >
+                    <div>
+                      <div className="flex items-center justify-between mb-space-xs">
+                        <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary font-label-sm text-label-sm font-semibold">
+                          {g.categoryLabel}
+                        </span>
+                        <span className="font-label-sm text-label-sm text-on-surface-variant">
+                          {t("common.due")} {g.deadlineFormatted}
+                        </span>
+                      </div>
+                      <h3 className="font-headline-sm text-headline-sm text-on-surface mb-1 group-hover:text-primary transition-colors line-clamp-1">
+                        {g.title}
+                      </h3>
+                      <p className="font-body-sm text-body-sm text-on-surface-variant mb-space-md line-clamp-2">
+                        {g.description}
+                      </p>
+                    </div>
+                    <div>
+                      <div className="flex items-center justify-between font-label-sm text-label-sm mb-1.5">
+                        <span className="text-on-surface-variant">
+                          {g.doneCount ? `${g.doneCount}/${g.totalCount}` : `${g.milestones?.filter((m) => m.completed).length || 0}/${g.milestones?.length || 0}`} {t("projects.milestonesCount")}
+                        </span>
+                        <span className="font-bold text-primary">{g.progress}%</span>
+                      </div>
+                      <div className="w-full bg-surface-container h-2 rounded-full overflow-hidden">
+                        <div className="bg-primary h-full rounded-full" style={{ width: `${g.progress}%` }}></div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Section C: Active Projects Tracking */}
@@ -900,53 +924,77 @@ export default function DashboardPage() {
               </Link>
             </div>
 
-            <div className="flex flex-col gap-space-md">
-              {projects.slice(0, 2).map((p) => (
-                <div
-                  key={p.id}
-                  onClick={() => openProjectModal(p.key)}
-                  className="p-space-lg rounded-xl bg-surface-container-low hover:bg-surface-container transition-colors flex flex-col md:flex-row md:items-center justify-between gap-space-md cursor-pointer"
-                >
-                  <div className="flex items-start gap-space-md min-w-0">
-                    <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center text-primary flex-shrink-0">
-                      <span className="material-symbols-outlined text-[24px]">{p.icon || "web"}</span>
-                    </div>
-                    <div className="flex flex-col min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <h4 className="font-headline-sm text-headline-sm text-on-surface truncate">
-                          {p.title}
-                        </h4>
-                        <span className="px-2 py-0.5 rounded-full bg-tertiary-container/20 text-tertiary font-label-sm text-label-sm">
-                          {p.status === "completed"
-                            ? t("common.completed")
-                            : p.status === "planning"
-                            ? t("common.planning")
-                            : t("common.inProgress")}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-x-space-md gap-y-1 text-on-surface-variant font-label-sm text-label-sm flex-wrap">
-                        <span className="flex items-center gap-1">
-                          <span className="material-symbols-outlined text-[15px]">event</span> {t("dashboard.deadlinePrefix")} {p.deadline}
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <span className="material-symbols-outlined text-[15px]">check_circle</span> {p.completedTasks}/{p.totalTasks} {t("dashboard.tasksCompletedSuffix")}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                  {/* Progress Section */}
-                  <div className="flex flex-col md:w-56 flex-shrink-0">
-                    <div className="flex items-center justify-between font-label-md text-label-md mb-1">
-                      <span className="text-on-surface-variant">{t("projects.progressLabel")}</span>
-                      <span className="font-bold text-on-surface">{p.progress}%</span>
-                    </div>
-                    <div className="w-full bg-surface-container-highest h-2 rounded-full overflow-hidden">
-                      <div className="bg-primary h-full rounded-full" style={{ width: `${p.progress}%` }}></div>
-                    </div>
-                  </div>
+            {projects.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-8 px-4 text-center rounded-lg bg-surface-container-low/50 border border-dashed border-outline-variant/40">
+                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary mb-2">
+                  <span className="material-symbols-outlined text-[22px]">folder_open</span>
                 </div>
-              ))}
-            </div>
+                <span className="font-label-md text-label-md font-semibold text-on-surface mb-1">
+                  {language === "id" ? "Belum Ada Proyek" : "No Projects Yet"}
+                </span>
+                <p className="font-body-sm text-body-sm text-on-surface-variant max-w-xs mb-3">
+                  {language === "id"
+                    ? "Mulai inisiatif baru untuk mengorganisasi tugas dan memantau pencapaian."
+                    : "Start a new initiative to organize tasks and track deliverables."}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => openModal("project")}
+                  className="px-3 py-1.5 rounded-lg bg-surface-container hover:bg-surface-container-high text-primary font-label-sm text-label-sm font-medium flex items-center gap-1.5 transition-colors shadow-sm cursor-pointer"
+                >
+                  <span className="material-symbols-outlined text-[16px]">add</span>
+                  <span>{language === "id" ? "Buat Proyek Baru" : "Create New Project"}</span>
+                </button>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-space-md">
+                {projects.slice(0, 2).map((p) => (
+                  <div
+                    key={p.id}
+                    onClick={() => openProjectModal(p.key)}
+                    className="p-space-lg rounded-xl bg-surface-container-low hover:bg-surface-container transition-colors flex flex-col md:flex-row md:items-center justify-between gap-space-md cursor-pointer"
+                  >
+                    <div className="flex items-start gap-space-md min-w-0">
+                      <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center text-primary flex-shrink-0">
+                        <span className="material-symbols-outlined text-[24px]">{p.icon || "web"}</span>
+                      </div>
+                      <div className="flex flex-col min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <h4 className="font-headline-sm text-headline-sm text-on-surface truncate">
+                            {p.title}
+                          </h4>
+                          <span className="px-2 py-0.5 rounded-full bg-tertiary-container/20 text-tertiary font-label-sm text-label-sm">
+                            {p.status === "completed"
+                              ? t("common.completed")
+                              : p.status === "planning"
+                              ? t("common.planning")
+                              : t("common.inProgress")}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-x-space-md gap-y-1 text-on-surface-variant font-label-sm text-label-sm flex-wrap">
+                          <span className="flex items-center gap-1">
+                            <span className="material-symbols-outlined text-[15px]">event</span> {t("dashboard.deadlinePrefix")} {p.deadline}
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <span className="material-symbols-outlined text-[15px]">check_circle</span> {p.completedTasks}/{p.totalTasks} {t("dashboard.tasksCompletedSuffix")}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    {/* Progress Section */}
+                    <div className="flex flex-col md:w-56 flex-shrink-0">
+                      <div className="flex items-center justify-between font-label-md text-label-md mb-1">
+                        <span className="text-on-surface-variant">{t("projects.progressLabel")}</span>
+                        <span className="font-bold text-on-surface">{p.progress}%</span>
+                      </div>
+                      <div className="w-full bg-surface-container-highest h-2 rounded-full overflow-hidden">
+                        <div className="bg-primary h-full rounded-full" style={{ width: `${p.progress}%` }}></div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
@@ -1058,7 +1106,22 @@ export default function DashboardPage() {
             </div>
 
             <div className="flex flex-col gap-space-xs" id="taskListContainer">
-              {todayTasks.slice(0, 7).map((taskItem) => (
+              {todayTasks.length === 0 ? (
+                <div className="py-6 px-4 text-center rounded-lg bg-surface-container-low/50 border border-dashed border-outline-variant/40 flex flex-col items-center">
+                  <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary mb-2">
+                    <span className="material-symbols-outlined text-[22px]">checklist</span>
+                  </div>
+                  <span className="font-label-md text-label-md font-semibold text-on-surface mb-1">
+                    {language === "id" ? "Belum Ada Tugas Hari Ini" : "No Tasks For Today"}
+                  </span>
+                  <p className="font-body-sm text-body-sm text-on-surface-variant max-w-xs">
+                    {language === "id"
+                      ? "Tambahkan tugas harian untuk mulai memantau checklist kerja Anda."
+                      : "Add daily tasks to start tracking your daily work checklist."}
+                  </p>
+                </div>
+              ) : (
+                todayTasks.slice(0, 7).map((taskItem) => (
                 <label
                   key={taskItem.id}
                   className="flex items-start gap-space-sm p-space-sm rounded-lg hover:bg-surface-container-low transition-colors cursor-pointer select-none"
@@ -1107,7 +1170,7 @@ export default function DashboardPage() {
                     </div>
                   </div>
                 </label>
-              ))}
+              )))}
             </div>
 
             <div className="pt-space-md mt-space-sm">

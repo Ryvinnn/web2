@@ -152,37 +152,49 @@ export default function AppHeader() {
               </div>
 
               <div className="flex flex-col gap-1 max-h-72 overflow-y-auto custom-scrollbar">
-                {notifications.map((notif) => (
-                  <div
-                    key={notif.id}
-                    onClick={() => {
-                      setNotificationsOpen(false);
-                      navigate(notif.route);
-                    }}
-                    className={`p-2.5 rounded-xl cursor-pointer transition-colors flex items-start gap-2.5 ${!notif.read ? "bg-primary/5 hover:bg-primary/10" : "hover:bg-surface-container-low"
-                      }`}
-                  >
-                    <span
-                      className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${notif.type === "urgent"
-                          ? "bg-error"
-                          : notif.type === "success"
-                            ? "bg-tertiary"
-                            : "bg-primary"
-                        }`}
-                    ></span>
-                    <div className="flex flex-col min-w-0">
-                      <span className="font-headline-sm text-[13px] font-semibold text-on-surface truncate">
-                        {notif.title}
-                      </span>
-                      <span className="font-body-sm text-[12px] text-on-surface-variant line-clamp-2">
-                        {notif.desc}
-                      </span>
-                      <span className="text-[11px] text-on-surface-variant mt-0.5 font-medium">
-                        {notif.time}
-                      </span>
-                    </div>
+                {notifications.length === 0 ? (
+                  <div className="py-8 flex flex-col items-center justify-center text-center text-on-surface-variant">
+                    <span className="material-symbols-outlined text-[28px] mb-1.5 text-on-surface-variant/70">notifications_none</span>
+                    <span className="text-body-sm font-medium">
+                      {language === "id" ? "Tidak ada notifikasi baru" : "No new notifications"}
+                    </span>
+                    <span className="text-label-sm text-on-surface-variant mt-0.5">
+                      {language === "id" ? "Pemberitahuan aktivitas akan muncul di sini" : "Activity notifications will appear here"}
+                    </span>
                   </div>
-                ))}
+                ) : (
+                  notifications.map((notif) => (
+                    <div
+                      key={notif.id}
+                      onClick={() => {
+                        setNotificationsOpen(false);
+                        navigate(notif.route);
+                      }}
+                      className={`p-2.5 rounded-xl cursor-pointer transition-colors flex items-start gap-2.5 ${!notif.read ? "bg-primary/5 hover:bg-primary/10" : "hover:bg-surface-container-low"
+                        }`}
+                    >
+                      <span
+                        className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${notif.type === "urgent"
+                            ? "bg-error"
+                            : notif.type === "success"
+                              ? "bg-tertiary"
+                              : "bg-primary"
+                          }`}
+                      ></span>
+                      <div className="flex flex-col min-w-0">
+                        <span className="font-headline-sm text-[13px] font-semibold text-on-surface truncate">
+                          {notif.title}
+                        </span>
+                        <span className="font-body-sm text-[12px] text-on-surface-variant line-clamp-2">
+                          {notif.desc}
+                        </span>
+                        <span className="text-[11px] text-on-surface-variant mt-0.5 font-medium">
+                          {notif.time}
+                        </span>
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           )}

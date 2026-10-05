@@ -77,7 +77,7 @@ export const translations = {
     header: {
       searchPlaceholder: "Cari target, proyek, tugas, catatan... (⌘K)",
       quickAdd: "Buat Tugas atau Agenda Baru",
-      notifications: "Notifikasi (4 item pending)",
+      notifications: "Notifikasi",
       onlineStatus: "Aktif Online",
       switchLanguageTitle: "Ganti ke English"
     },
@@ -356,7 +356,7 @@ export const translations = {
       allTab: "Semua Tugas",
       sortedByLabel: "Diurutkan berdasarkan: Tenggat & Urgensi",
       searchPlaceholder: "Filter tugas berdasarkan nama, tag, tiket...",
-      allProjectsOption: "Semua Proyek (Suru SaaS, Mobile, Core)",
+      allProjectsOption: "Semua Proyek",
       allGoalsOption: "Semua Target Induk",
       priorityAllOption: "Prioritas: Semua",
       overdueSectionTitle: "Terlambat (Memerlukan Perhatian Segera)",
@@ -607,7 +607,7 @@ export const translations = {
     header: {
       searchPlaceholder: "Search goals, projects, tasks, notes... (⌘K)",
       quickAdd: "Create New Task or Item",
-      notifications: "Notifications (4 pending items)",
+      notifications: "Notifications",
       onlineStatus: "Online Active",
       switchLanguageTitle: "Switch to Bahasa Indonesia"
     },
@@ -887,7 +887,7 @@ export const translations = {
       allTab: "All Tasks",
       sortedByLabel: "Sorted by: Deadline & Urgency",
       searchPlaceholder: "Filter tasks by name, tag, ticket...",
-      allProjectsOption: "All Projects (Suru SaaS, Mobile, Core)",
+      allProjectsOption: "All Projects",
       allGoalsOption: "All Parent Goals",
       priorityAllOption: "Priority: All",
       overdueSectionTitle: "Overdue (Requires Immediate Attention)",

@@ -23,7 +23,7 @@ export default function CreateModal() {
   const fileInputRef = useRef(null);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [category, setCategory] = useState("Suru Attendance SaaS");
+  const [category, setCategory] = useState("");
   const [priority, setPriority] = useState("medium");
   const [deadline, setDeadline] = useState(() => formatLocalDateToISO(new Date()));
   const [coverImage, setCoverImage] = useState("");
@@ -32,10 +32,7 @@ export default function CreateModal() {
   const [showUrlInput, setShowUrlInput] = useState(false);
   const [customUrl, setCustomUrl] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
-  const [milestonesList, setMilestonesList] = useState([
-    { id: 1, title: "Requirement gathering & wireframing", completed: false },
-    { id: 2, title: "Build minimum viable prototypes", completed: false }
-  ]);
+  const [milestonesList, setMilestonesList] = useState([]);
 
   // Handle Escape key to close modal
   useEffect(() => {
@@ -76,10 +73,7 @@ export default function CreateModal() {
           }))
         );
       } else {
-        setMilestonesList([
-          { id: 1, title: "Requirement gathering & wireframing", completed: false },
-          { id: 2, title: "Build minimum viable prototypes", completed: false }
-        ]);
+        setMilestonesList([]);
       }
     } else {
       setTitle("");
@@ -97,12 +91,9 @@ export default function CreateModal() {
           ? "Architecture"
           : type === "goal"
           ? "career"
-          : projects[0]?.title || "Suru Attendance SaaS"
+          : projects[0]?.title || "Daily Routine"
       );
-      setMilestonesList([
-        { id: 1, title: "Requirement gathering & wireframing", completed: false },
-        { id: 2, title: "Build minimum viable prototypes", completed: false }
-      ]);
+      setMilestonesList([]);
     }
   }, [isOpen, initialData, type, projects]);
 

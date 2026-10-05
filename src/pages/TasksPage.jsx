@@ -26,7 +26,8 @@ export default function TasksPage() {
     rescheduleOverdueTasks,
     showToast,
     language,
-    t
+    t,
+    streakCount
   } = useWorkspace();
 
   const [activeTab, setActiveTab] = useState("today"); // 'today' | 'upcoming' | 'overdue' | 'completed' | 'all'
@@ -458,7 +459,11 @@ export default function TasksPage() {
                 </span>
               </div>
               <p className="font-body-md text-body-md text-on-surface-variant mt-1">
-                {t("tasks.focusBannerDesc")}
+                {todayTasks.length === 0
+                  ? (language === "id"
+                      ? "Belum ada agenda tugas untuk hari ini. Tambahkan tugas baru untuk mulai mengelola alur kerja harian."
+                      : "No tasks scheduled for today. Add a new task to start organizing your daily workflow.")
+                  : t("tasks.focusBannerDesc")}
               </p>
             </div>
           </div>
@@ -476,14 +481,23 @@ export default function TasksPage() {
               <span className="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">
                 {t("tasks.estTimeLabel")}
               </span>
-              <span className="font-headline-md text-headline-md text-on-surface font-semibold">4h 15m</span>
+              <span className="font-headline-md text-headline-md text-on-surface font-semibold">
+                {(() => {
+                  const rem = todayTasks.length - todayCompletedTasks.length;
+                  const estMins = rem * 45;
+                  const h = Math.floor(estMins / 60);
+                  const m = estMins % 60;
+                  if (estMins === 0) return "0m";
+                  return h > 0 ? `${h}h ${m > 0 ? `${m}m` : ""}`.trim() : `${m}m`;
+                })()}
+              </span>
             </div>
             <div className="flex flex-col">
               <span className="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">
                 {t("tasks.streakLabel")}
               </span>
               <span className="font-headline-md text-headline-md text-primary font-semibold flex items-center gap-1">
-                <span className="material-symbols-outlined text-[20px]">local_fire_department</span> 12 {t("tasks.daysLabel")}
+                <span className="material-symbols-outlined text-[20px]">local_fire_department</span> {streakCount || 0} {t("tasks.daysLabel")}
               </span>
             </div>
           </div>

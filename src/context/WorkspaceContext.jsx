@@ -151,42 +151,55 @@ export function WorkspaceProvider({ children }) {
     return t(`dashboard.greetings.${period}`, { user: targetUser });
   };
 
-  // Load state from localStorage or initial defaults
-  const [goals, setGoals] = useState(() => {
-    try {
-      const saved = localStorage.getItem("ignos_goals");
-      return saved ? JSON.parse(saved) : initialGoals;
-    } catch {
-      return initialGoals;
-    }
-  });
+// Storage key helpers for user-scoped persistence
+function getUserStorageKey(baseKey, userObj) {
+  const userIdentifier = userObj?.email || userObj?.id;
+  if (!userIdentifier) return baseKey;
+  return `${baseKey}_${userIdentifier.trim().toLowerCase().replace(/[^a-z0-9_]/g, "_")}`;
+}
 
-  const [projects, setProjects] = useState(() => {
-    try {
-      const saved = localStorage.getItem("ignos_projects");
-      return saved ? JSON.parse(saved) : initialProjects;
-    } catch {
-      return initialProjects;
+function loadCollection(baseKey, currentUser) {
+  try {
+    const userKey = getUserStorageKey(baseKey, currentUser);
+    const userSaved = localStorage.getItem(userKey);
+    if (userSaved !== null) {
+      const parsed = JSON.parse(userSaved);
+      return Array.isArray(parsed) ? parsed : [];
     }
-  });
+    // Backward compatibility for existing data under baseKey for default user:
+    const isDefaultUser = !currentUser || currentUser.email === "laba@suru.workspace";
+    if (isDefaultUser) {
+      const legacySaved = localStorage.getItem(baseKey);
+      if (legacySaved !== null) {
+        const parsed = JSON.parse(legacySaved);
+        if (Array.isArray(parsed)) {
+          return parsed;
+        }
+      }
+    }
+    return [];
+  } catch {
+    return [];
+  }
+}
 
-  const [tasks, setTasks] = useState(() => {
-    try {
-      const saved = localStorage.getItem("ignos_tasks");
-      return saved ? JSON.parse(saved) : initialTasks;
-    } catch {
-      return initialTasks;
-    }
-  });
+  // Load state from localStorage with user scoping, defaulting to empty collections for new users
+  const [goals, setGoals] = useState(() => loadCollection("ignos_goals", user));
+  const [projects, setProjects] = useState(() => loadCollection("ignos_projects", user));
+  const [tasks, setTasks] = useState(() => loadCollection("ignos_tasks", user));
+  const [notes, setNotes] = useState(() => loadCollection("ignos_notes", user));
+  const [activityFeed, setActivityFeed] = useState(() => loadCollection("ignos_activity_feed", user));
 
-  const [notes, setNotes] = useState(() => {
-    try {
-      const saved = localStorage.getItem("ignos_notes");
-      return saved ? JSON.parse(saved) : initialNotes;
-    } catch {
-      return initialNotes;
+  // Reload collections if user email changes (switching accounts)
+  useEffect(() => {
+    if (user?.email) {
+      setGoals(loadCollection("ignos_goals", user));
+      setProjects(loadCollection("ignos_projects", user));
+      setTasks(loadCollection("ignos_tasks", user));
+      setNotes(loadCollection("ignos_notes", user));
+      setActivityFeed(loadCollection("ignos_activity_feed", user));
     }
-  });
+  }, [user?.email]);
 
   // Dynamic "Perlu Perhatian" / "Needs Attention" synchronized with live Projects, Goals, Tasks, and Subtasks
   const needsAttention = useMemo(() => {
@@ -210,23 +223,6 @@ export function WorkspaceProvider({ children }) {
       // ignore
     }
   }, []);
-
-  const [activityFeed, setActivityFeed] = useState(() => {
-    try {
-      const saved = localStorage.getItem("ignos_activity_feed");
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) {
-          return parsed.filter(
-            (act) => act.id !== "act-1" && act.id !== "act-2" && act.id !== "act-3"
-          );
-        }
-      }
-      return initialActivityFeed;
-    } catch {
-      return initialActivityFeed;
-    }
-  });
 
   // UI States
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -276,26 +272,46 @@ export function WorkspaceProvider({ children }) {
     projectKey: "ignos"
   });
 
-  // Sync to localStorage
+  // Sync to localStorage with user scoping
   useEffect(() => {
-    localStorage.setItem("ignos_goals", JSON.stringify(goals));
-  }, [goals]);
+    const key = getUserStorageKey("ignos_goals", user);
+    localStorage.setItem(key, JSON.stringify(goals));
+    if (!user || user.email === "laba@suru.workspace") {
+      localStorage.setItem("ignos_goals", JSON.stringify(goals));
+    }
+  }, [goals, user]);
 
   useEffect(() => {
-    localStorage.setItem("ignos_projects", JSON.stringify(projects));
-  }, [projects]);
+    const key = getUserStorageKey("ignos_projects", user);
+    localStorage.setItem(key, JSON.stringify(projects));
+    if (!user || user.email === "laba@suru.workspace") {
+      localStorage.setItem("ignos_projects", JSON.stringify(projects));
+    }
+  }, [projects, user]);
 
   useEffect(() => {
-    localStorage.setItem("ignos_tasks", JSON.stringify(tasks));
-  }, [tasks]);
+    const key = getUserStorageKey("ignos_tasks", user);
+    localStorage.setItem(key, JSON.stringify(tasks));
+    if (!user || user.email === "laba@suru.workspace") {
+      localStorage.setItem("ignos_tasks", JSON.stringify(tasks));
+    }
+  }, [tasks, user]);
 
   useEffect(() => {
-    localStorage.setItem("ignos_notes", JSON.stringify(notes));
-  }, [notes]);
+    const key = getUserStorageKey("ignos_notes", user);
+    localStorage.setItem(key, JSON.stringify(notes));
+    if (!user || user.email === "laba@suru.workspace") {
+      localStorage.setItem("ignos_notes", JSON.stringify(notes));
+    }
+  }, [notes, user]);
 
   useEffect(() => {
-    localStorage.setItem("ignos_activity_feed", JSON.stringify(activityFeed));
-  }, [activityFeed]);
+    const key = getUserStorageKey("ignos_activity_feed", user);
+    localStorage.setItem(key, JSON.stringify(activityFeed));
+    if (!user || user.email === "laba@suru.workspace") {
+      localStorage.setItem("ignos_activity_feed", JSON.stringify(activityFeed));
+    }
+  }, [activityFeed, user]);
 
   // Task actions
   const toggleTask = (taskId) => {
@@ -413,9 +429,9 @@ export function WorkspaceProvider({ children }) {
       ticket: `IGN-${Math.floor(215 + Math.random() * 50)}`,
       title: newTask.title,
       description: newTask.description || "",
-      project: newTask.project || "Suru SaaS",
-      projectId: newTask.projectId || "p1",
-      goal: newTask.goal || "Fullstack Dev",
+      project: newTask.project || (language === "id" ? "Umum" : "General"),
+      projectId: newTask.projectId || "",
+      goal: newTask.goal || "",
       priority: newTask.priority || "medium",
       timeTag: newTask.timeTag || "Today",
       status: newTask.status || "today",
@@ -508,17 +524,53 @@ export function WorkspaceProvider({ children }) {
 
   const clearAllTasks = () => {
     setTasks([]);
+    setGoals([]);
+    setProjects([]);
+    setNotes([]);
     setActivityFeed([]);
-    localStorage.setItem("ignos_tasks", "[]");
-    localStorage.setItem("ignos_activity_feed", "[]");
-    showToast(language === "id" ? "Semua tugas dan aktivitas telah dikosongkan" : "All tasks and activities cleared", "info");
+    const goalsKey = getUserStorageKey("ignos_goals", user);
+    const projectsKey = getUserStorageKey("ignos_projects", user);
+    const tasksKey = getUserStorageKey("ignos_tasks", user);
+    const notesKey = getUserStorageKey("ignos_notes", user);
+    const activityKey = getUserStorageKey("ignos_activity_feed", user);
+    localStorage.setItem(goalsKey, "[]");
+    localStorage.setItem(projectsKey, "[]");
+    localStorage.setItem(tasksKey, "[]");
+    localStorage.setItem(notesKey, "[]");
+    localStorage.setItem(activityKey, "[]");
+    if (!user || user.email === "laba@suru.workspace") {
+      localStorage.setItem("ignos_goals", "[]");
+      localStorage.setItem("ignos_projects", "[]");
+      localStorage.setItem("ignos_tasks", "[]");
+      localStorage.setItem("ignos_notes", "[]");
+      localStorage.setItem("ignos_activity_feed", "[]");
+    }
+    showToast(language === "id" ? "Semua data workspace telah dikosongkan" : "All workspace data cleared", "info");
   };
 
   const resetDefaultTasks = () => {
     setTasks(initialTasks);
+    setGoals(initialGoals);
+    setProjects(initialProjects);
+    setNotes(initialNotes);
     setActivityFeed(initialActivityFeed);
-    localStorage.setItem("ignos_tasks", JSON.stringify(initialTasks));
-    localStorage.setItem("ignos_activity_feed", JSON.stringify(initialActivityFeed));
+    const goalsKey = getUserStorageKey("ignos_goals", user);
+    const projectsKey = getUserStorageKey("ignos_projects", user);
+    const tasksKey = getUserStorageKey("ignos_tasks", user);
+    const notesKey = getUserStorageKey("ignos_notes", user);
+    const activityKey = getUserStorageKey("ignos_activity_feed", user);
+    localStorage.setItem(goalsKey, JSON.stringify(initialGoals));
+    localStorage.setItem(projectsKey, JSON.stringify(initialProjects));
+    localStorage.setItem(tasksKey, JSON.stringify(initialTasks));
+    localStorage.setItem(notesKey, JSON.stringify(initialNotes));
+    localStorage.setItem(activityKey, JSON.stringify(initialActivityFeed));
+    if (!user || user.email === "laba@suru.workspace") {
+      localStorage.setItem("ignos_goals", JSON.stringify(initialGoals));
+      localStorage.setItem("ignos_projects", JSON.stringify(initialProjects));
+      localStorage.setItem("ignos_tasks", JSON.stringify(initialTasks));
+      localStorage.setItem("ignos_notes", JSON.stringify(initialNotes));
+      localStorage.setItem("ignos_activity_feed", JSON.stringify(initialActivityFeed));
+    }
     showToast(language === "id" ? "Data sampel berhasil dimuat ulang" : "Sample data reloaded successfully");
   };
 
@@ -596,8 +648,8 @@ export function WorkspaceProvider({ children }) {
           ? "Health & Fitness"
           : "Personal",
       priority: newGoal.priority || "medium",
-      deadline: newGoal.deadline || "2026-12-31",
-      deadlineFormatted: newGoal.deadlineFormatted || "Dec 31, 2026",
+      deadline: newGoal.deadline || formatLocalDateToISO(currentDate),
+      deadlineFormatted: newGoal.deadlineFormatted || formatLocalDateLong(currentDate, language),
       status: newGoal.status || "in_progress",
       progress: newGoal.progress || 0,
       milestones: newGoal.milestones || []
@@ -744,16 +796,16 @@ export function WorkspaceProvider({ children }) {
       title: newProject.title,
       description: newProject.description || "",
       category: newProject.category || "Web Engineering",
-      linkedGoal: newProject.linkedGoal || "Learn Fullstack Development",
-      techStack: newProject.techStack || ["React", "Tailwind"],
+      linkedGoal: newProject.linkedGoal || "",
+      techStack: newProject.techStack || [],
       progress: 0,
       completedTasks: 0,
-      totalTasks: 1,
-      deadline: newProject.deadline || "Nov 2026",
+      totalTasks: newProject.totalTasks || 0,
+      deadline: newProject.deadline || formatLocalDateLong(currentDate, language),
       status: newProject.status || "in-progress",
       statusLabel: "In Progress",
-      owner: "Alex",
-      milestones: 1,
+      owner: user?.name || "Admin",
+      milestones: newProject.milestones || 0,
       icon: newProject.icon || "hub",
       gradient: "from-surface-container via-surface-container-high to-secondary-container",
       coverImage: newProject.coverImage || null,

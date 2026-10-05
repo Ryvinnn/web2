@@ -4,7 +4,7 @@ import { useWorkspace } from "../context/WorkspaceContext";
 
 export default function ProjectsPage() {
   const navigate = useNavigate();
-  const { projects, openModal, openProjectModal, deleteProject, t, language } = useWorkspace();
+  const { projects, goals, tasks, currentDate, openModal, openProjectModal, deleteProject, t, language } = useWorkspace();
 
   const [statusFilter, setStatusFilter] = useState("all"); // 'all' | 'in-progress' | 'planning' | 'completed'
   const [viewMode, setViewMode] = useState("grid"); // 'grid' | 'kanban' | 'list'
@@ -15,6 +15,72 @@ export default function ProjectsPage() {
   const totalTasks = useMemo(() => projects.reduce((acc, p) => acc + (p.totalTasks || 0), 0), [projects]);
   const completedTasks = useMemo(() => projects.reduce((acc, p) => acc + (p.completedTasks || 0), 0), [projects]);
   const taskPercent = useMemo(() => (totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0), [totalTasks, completedTasks]);
+
+  const sprintDays = useMemo(() => {
+    const now = currentDate instanceof Date ? currentDate : new Date();
+    const day = now.getDay();
+    const diffToMonday = (day + 6) % 7;
+    const currentMonday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - diffToMonday, 0, 0, 0, 0);
+
+    const dayKeys = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
+    const labels = [
+      t("common.days.mon"),
+      t("common.days.tue"),
+      t("common.days.wed"),
+      t("common.days.thu"),
+      t("common.days.fri"),
+      t("common.days.sat"),
+      t("common.days.sun")
+    ];
+
+    const priProjId = projects[0]?.id || projects[0]?.title;
+    const secProjId = projects[1]?.id || projects[1]?.title;
+
+    return dayKeys.map((key, idx) => {
+      const d = new Date(currentMonday);
+      d.setDate(currentMonday.getDate() + idx);
+      const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+      const dayTasks = (tasks || []).filter((t) => {
+        const taskDate = (t.completedAt || t.deadline || "").slice(0, 10);
+        return taskDate === iso || (idx === diffToMonday && t.status === "today");
+      });
+
+      const total = dayTasks.length;
+      if (total === 0) {
+        return { key, label: labels[idx], isToday: idx === diffToMonday, hHigh: "0%", hSec: "0%", hPri: "0%" };
+      }
+
+      const priCount = dayTasks.filter((t) => (t.projectId && t.projectId === priProjId) || (t.project && t.project === projects[0]?.title)).length;
+      const secCount = dayTasks.filter((t) => (t.projectId && t.projectId === secProjId) || (t.project && t.project === projects[1]?.title)).length;
+      const otherCount = total - priCount - secCount;
+
+      const scale = Math.min(100, total * 30);
+      const hPri = `${Math.round((priCount / total) * scale)}%`;
+      const hSec = `${Math.round((secCount / total) * scale)}%`;
+      const hHigh = `${Math.round((otherCount / total) * scale)}%`;
+
+      return { key, label: labels[idx], isToday: idx === diffToMonday, hHigh, hSec, hPri };
+    });
+  }, [currentDate, tasks, projects, t]);
+
+  const approachingMilestones = useMemo(() => {
+    const list = [];
+    (goals || []).forEach((goal) => {
+      (goal.milestones || []).forEach((m, idx) => {
+        if (!m.completed) {
+          list.push({
+            id: m.id || `${goal.id}-${idx}`,
+            title: m.title,
+            goalTitle: goal.title,
+            date: m.date || goal.targetDate || goal.deadline || "",
+            code: m.code || `M${idx + 1}`
+          });
+        }
+      });
+    });
+    return list.slice(0, 3);
+  }, [goals]);
 
   const filteredProjects = useMemo(() => {
     if (statusFilter === "all") return projects;
@@ -580,46 +646,45 @@ export default function ProjectsPage() {
               <p className="font-body-md text-body-md text-on-surface-variant">{t("projects.weeklyDesc")}</p>
             </div>
             <div className="flex items-center gap-2">
-              <span className="flex items-center gap-1.5 font-label-sm text-label-sm text-on-surface-variant">
-                <span className="w-2.5 h-2.5 rounded-full bg-primary"></span> Suru SaaS
-              </span>
-              <span className="flex items-center gap-1.5 font-label-sm text-label-sm text-on-surface-variant">
-                <span className="w-2.5 h-2.5 rounded-full bg-secondary"></span> Attendance App
-              </span>
-              <span className="flex items-center gap-1.5 font-label-sm text-label-sm text-on-surface-variant">
-                <span className="w-2.5 h-2.5 rounded-full bg-surface-container-highest"></span> {t("common.other")}
-              </span>
+              {projects[0] && (
+                <span className="flex items-center gap-1.5 font-label-sm text-label-sm text-on-surface-variant">
+                  <span className="w-2.5 h-2.5 rounded-full bg-primary"></span> {projects[0].title}
+                </span>
+              )}
+              {projects[1] && (
+                <span className="flex items-center gap-1.5 font-label-sm text-label-sm text-on-surface-variant">
+                  <span className="w-2.5 h-2.5 rounded-full bg-secondary"></span> {projects[1].title}
+                </span>
+              )}
+              {projects.length > 2 && (
+                <span className="flex items-center gap-1.5 font-label-sm text-label-sm text-on-surface-variant">
+                  <span className="w-2.5 h-2.5 rounded-full bg-surface-container-highest"></span> {t("common.other")}
+                </span>
+              )}
+              {projects.length === 0 && (
+                <span className="font-label-sm text-label-sm text-on-surface-variant">
+                  {language === "id" ? "Belum ada aktivitas proyek" : "No project activity yet"}
+                </span>
+              )}
             </div>
           </div>
 
-          {/* Minimal Stacked Bar Chart matching Stitch screen 4 */}
+          {/* Minimal Stacked Bar Chart derived from real task data */}
           <div className="h-44 w-full flex items-end justify-between gap-3 pt-4 px-2">
-            {[
-              { key: "mon", label: t("common.days.mon"), hHigh: "15%", hSec: "20%", hPri: "45%" },
-              { key: "tue", label: t("common.days.tue"), hHigh: "10%", hSec: "35%", hPri: "35%" },
-              { key: "wed", label: t("common.days.wed"), hHigh: "20%", hSec: "25%", hPri: "50%" },
-              { key: "thu", label: t("common.days.thu"), hHigh: "0%", hSec: "30%", hPri: "40%" },
-              { key: "fri", label: t("common.days.fri"), hHigh: "0%", hSec: "20%", hPri: "60%" },
-              { key: "sat", label: t("common.days.sat"), hHigh: "0%", hSec: "0%", hPri: "25%" },
-              { key: "sun", label: t("common.days.sun"), hHigh: "20%", hSec: "0%", hPri: "0%" }
-            ].map((d, idx) => {
-              const todayDayIndex = (new Date().getDay() + 6) % 7; // Mon=0, Sun=6
-              const isToday = idx === todayDayIndex;
-              return (
-                <div key={d.key} className="flex-1 flex flex-col items-center gap-2 group">
-                  <div className="w-full max-w-[42px] flex flex-col-reverse h-32 rounded-lg bg-surface-container-low overflow-hidden">
-                    {d.hHigh !== "0%" && <div className="w-full bg-surface-container-highest" style={{ height: d.hHigh }}></div>}
-                    {d.hSec !== "0%" && <div className="w-full bg-secondary" style={{ height: d.hSec }}></div>}
-                    {d.hPri !== "0%" && <div className="w-full bg-primary" style={{ height: d.hPri }}></div>}
-                  </div>
-                  <span className={`font-label-sm text-label-sm truncate max-w-full text-center ${
-                    isToday ? "text-primary font-semibold" : "text-on-surface-variant group-hover:text-on-surface"
-                  }`}>
-                    {isToday ? `${d.label} (${language === "id" ? "Hari Ini" : "Today"})` : d.label}
-                  </span>
+            {sprintDays.map((d) => (
+              <div key={d.key} className="flex-1 flex flex-col items-center gap-2 group">
+                <div className="w-full max-w-[42px] flex flex-col-reverse h-32 rounded-lg bg-surface-container-low overflow-hidden">
+                  {d.hHigh !== "0%" && <div className="w-full bg-surface-container-highest" style={{ height: d.hHigh }}></div>}
+                  {d.hSec !== "0%" && <div className="w-full bg-secondary" style={{ height: d.hSec }}></div>}
+                  {d.hPri !== "0%" && <div className="w-full bg-primary" style={{ height: d.hPri }}></div>}
                 </div>
-              );
-            })}
+                <span className={`font-label-sm text-label-sm truncate max-w-full text-center ${
+                  d.isToday ? "text-primary font-semibold" : "text-on-surface-variant group-hover:text-on-surface"
+                }`}>
+                  {d.isToday ? `${d.label} (${language === "id" ? "Hari Ini" : "Today"})` : d.label}
+                </span>
+              </div>
+            ))}
           </div>
         </div>
 
@@ -632,64 +697,46 @@ export default function ProjectsPage() {
                 {t("projects.sprintFocus")}
               </span>
             </div>
-            <div className="flex flex-col gap-space-md">
-              <div className="flex items-start gap-space-md p-space-sm rounded-lg hover:bg-surface-container-low transition-colors">
-                <div className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center flex-shrink-0 mt-0.5">
-                  <span className="material-symbols-outlined text-[18px]">verified_user</span>
-                </div>
-                <div className="flex flex-col min-w-0 flex-1">
-                  <span className="font-headline-sm text-headline-sm text-on-surface truncate">
-                    Multi-tenancy Auth Migration
-                  </span>
-                  <span className="font-label-sm text-label-sm text-on-surface-variant">
-                    Suru SaaS • Due Sep 24
-                  </span>
-                </div>
-                <span className="px-2 py-0.5 rounded bg-surface-container text-primary font-label-sm text-label-sm font-semibold whitespace-nowrap">
-                  M4
+            {approachingMilestones.length === 0 ? (
+              <div className="flex flex-col items-center justify-center p-space-xl text-center my-auto">
+                <span className="material-symbols-outlined text-[36px] text-on-surface-variant mb-2">flag</span>
+                <span className="font-headline-sm text-headline-sm text-on-surface">
+                  {language === "id" ? "Belum Ada Milestone Mendekat" : "No Approaching Milestones"}
                 </span>
+                <p className="font-body-sm text-body-sm text-on-surface-variant mt-1 max-w-xs">
+                  {language === "id"
+                    ? "Milestone dari target strategis yang belum selesai akan ditampilkan di sini."
+                    : "Uncompleted milestones from strategic goals will be displayed here."}
+                </p>
               </div>
-
-              <div className="flex items-start gap-space-md p-space-sm rounded-lg hover:bg-surface-container-low transition-colors">
-                <div className="w-8 h-8 rounded-lg bg-secondary-container text-on-secondary-container flex items-center justify-center flex-shrink-0 mt-0.5">
-                  <span className="material-symbols-outlined text-[18px]">location_on</span>
-                </div>
-                <div className="flex flex-col min-w-0 flex-1">
-                  <span className="font-headline-sm text-headline-sm text-on-surface truncate">
-                    Radar Geofence Precision Mode
-                  </span>
-                  <span className="font-label-sm text-label-sm text-on-surface-variant">
-                    Smart Attendance • Due Sep 30
-                  </span>
-                </div>
-                <span className="px-2 py-0.5 rounded bg-surface-container text-on-surface-variant font-label-sm text-label-sm font-semibold whitespace-nowrap">
-                  M3
-                </span>
+            ) : (
+              <div className="flex flex-col gap-space-md">
+                {approachingMilestones.map((m, idx) => (
+                  <div key={m.id || idx} className="flex items-start gap-space-md p-space-sm rounded-lg hover:bg-surface-container-low transition-colors">
+                    <div className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center flex-shrink-0 mt-0.5">
+                      <span className="material-symbols-outlined text-[18px]">verified_user</span>
+                    </div>
+                    <div className="flex flex-col min-w-0 flex-1">
+                      <span className="font-headline-sm text-headline-sm text-on-surface truncate">
+                        {m.title}
+                      </span>
+                      <span className="font-label-sm text-label-sm text-on-surface-variant truncate">
+                        {m.goalTitle} {m.date ? `• Due ${m.date}` : ""}
+                      </span>
+                    </div>
+                    <span className="px-2 py-0.5 rounded bg-surface-container text-primary font-label-sm text-label-sm font-semibold whitespace-nowrap">
+                      {m.code}
+                    </span>
+                  </div>
+                ))}
               </div>
-
-              <div className="flex items-start gap-space-md p-space-sm rounded-lg hover:bg-surface-container-low transition-colors">
-                <div className="w-8 h-8 rounded-lg bg-surface-container-highest text-secondary flex items-center justify-center flex-shrink-0 mt-0.5">
-                  <span className="material-symbols-outlined text-[18px]">article</span>
-                </div>
-                <div className="flex flex-col min-w-0 flex-1">
-                  <span className="font-headline-sm text-headline-sm text-on-surface truncate">
-                    Interactive Case Studies Layout
-                  </span>
-                  <span className="font-label-sm text-label-sm text-on-surface-variant">
-                    Portfolio • Due Oct 08
-                  </span>
-                </div>
-                <span className="px-2 py-0.5 rounded bg-surface-container text-on-surface-variant font-label-sm text-label-sm font-semibold whitespace-nowrap">
-                  M2
-                </span>
-              </div>
-            </div>
+            )}
           </div>
 
           <button
             type="button"
             onClick={() => navigate("/goals")}
-            className="w-full py-2 rounded-lg bg-surface-container-low hover:bg-surface-container text-on-surface font-headline-sm text-headline-sm transition-colors text-center mt-space-md"
+            className="w-full py-2 rounded-lg bg-surface-container-low hover:bg-surface-container text-on-surface font-headline-sm text-headline-sm transition-colors text-center mt-space-md cursor-pointer"
           >
             {t("projects.viewAllMilestones")}
           </button>

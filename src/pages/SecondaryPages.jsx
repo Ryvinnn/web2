@@ -1,9 +1,41 @@
 import React, { useState, useMemo } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useWorkspace } from "../context/WorkspaceContext";
+import { parseAnyDate } from "../utils/attention";
 
 export function ProgressPage() {
-  const { projects, t } = useWorkspace();
+  const { projects, goals, language, t } = useWorkspace();
+
+  const totalInitiatives = projects.length + goals.length;
+  const overallProgress = totalInitiatives > 0
+    ? Math.round(([...projects, ...goals].reduce((acc, item) => acc + (Number(item.progress) || 0), 0)) / totalInitiatives)
+    : 0;
+
+  const projectsProgress = projects.length > 0
+    ? (projects.reduce((acc, p) => acc + (Number(p.progress) || 0), 0) / projects.length).toFixed(1)
+    : "0";
+
+  let totalMilestones = 0;
+  let completedMilestones = 0;
+  goals.forEach((g) => {
+    if (Array.isArray(g.milestones) && g.milestones.length > 0) {
+      totalMilestones += g.milestones.length;
+      completedMilestones += g.milestones.filter((m) => m.completed).length;
+    } else if (g.totalCount) {
+      totalMilestones += Number(g.totalCount) || 0;
+      completedMilestones += Number(g.doneCount) || 0;
+    }
+  });
+  projects.forEach((p) => {
+    if (p.milestones) {
+      totalMilestones += Number(p.milestones) || 0;
+      if (p.status === "completed") {
+        completedMilestones += Number(p.milestones) || 0;
+      }
+    }
+  });
+
+  const milestonePercent = totalMilestones > 0 ? Math.round((completedMilestones / totalMilestones) * 100) : 0;
 
   return (
     <div className="flex flex-col w-full gap-space-xl">
@@ -30,12 +62,12 @@ export function ProgressPage() {
           <span className="font-label-sm text-label-sm uppercase text-on-surface-variant">
             {t("secondary.progress.overallTitle")}
           </span>
-          <div className="text-display font-display text-primary mt-2">72%</div>
+          <div className="text-display font-display text-primary mt-2">{overallProgress}%</div>
           <p className="text-body-sm text-on-surface-variant mt-1">
             {t("secondary.progress.overallDesc")}
           </p>
           <div className="w-full bg-surface-container h-2 rounded-full mt-4 overflow-hidden">
-            <div className="bg-primary h-full rounded-full" style={{ width: "72%" }}></div>
+            <div className="bg-primary h-full rounded-full transition-all duration-300" style={{ width: `${overallProgress}%` }}></div>
           </div>
         </div>
 
@@ -43,12 +75,12 @@ export function ProgressPage() {
           <span className="font-label-sm text-label-sm uppercase text-on-surface-variant">
             {t("secondary.progress.projectsTitle")}
           </span>
-          <div className="text-display font-display text-tertiary mt-2">64.5%</div>
+          <div className="text-display font-display text-tertiary mt-2">{projectsProgress}%</div>
           <p className="text-body-sm text-on-surface-variant mt-1">
             {t("secondary.progress.projectsDesc")}
           </p>
           <div className="w-full bg-surface-container h-2 rounded-full mt-4 overflow-hidden">
-            <div className="bg-tertiary h-full rounded-full" style={{ width: "64.5%" }}></div>
+            <div className="bg-tertiary h-full rounded-full transition-all duration-300" style={{ width: `${Math.min(100, Number(projectsProgress))}%` }}></div>
           </div>
         </div>
 
@@ -56,12 +88,12 @@ export function ProgressPage() {
           <span className="font-label-sm text-label-sm uppercase text-on-surface-variant">
             {t("secondary.progress.milestonesTitle")}
           </span>
-          <div className="text-display font-display text-on-surface mt-2">31 / 42</div>
+          <div className="text-display font-display text-on-surface mt-2">{completedMilestones} / {totalMilestones}</div>
           <p className="text-body-sm text-on-surface-variant mt-1">
             {t("secondary.progress.milestonesDesc")}
           </p>
           <div className="w-full bg-surface-container h-2 rounded-full mt-4 overflow-hidden">
-            <div className="bg-secondary h-full rounded-full" style={{ width: "74%" }}></div>
+            <div className="bg-secondary h-full rounded-full transition-all duration-300" style={{ width: `${milestonePercent}%` }}></div>
           </div>
         </div>
       </div>
@@ -95,6 +127,11 @@ export function ProgressPage() {
               </div>
             </div>
           ))}
+          {projects.length === 0 && (
+            <div className="p-space-xl text-center text-on-surface-variant font-label-md">
+              {language === "id" ? "Belum ada inisiatif proyek aktif." : "No active project pipelines."}
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -257,7 +294,7 @@ export function NotesPage() {
 }
 
 export function CalendarPage() {
-  const { t, language, openModal, currentDate } = useWorkspace();
+  const { t, language, openModal, currentDate, tasks, goals, projects } = useWorkspace();
   const [monthOffset, setMonthOffset] = useState(0);
 
   // Local device date calculations
@@ -312,32 +349,60 @@ export function CalendarPage() {
 
   const eventsMap = useMemo(() => {
     const map = {};
-    // Add today's event dynamically
-    map[todayDateNum] = {
-      title: "Team Attendance Sync",
-      tag: language === "id" ? "Hari Ini" : "Today",
-      color: "bg-primary text-on-primary"
-    };
 
-    const sprintReviewDay = Math.min(15, daysInMonth);
-    const authMigrationDay = Math.min(todayDateNum + 1, daysInMonth);
-    const releaseDay = Math.min(Math.max(28, daysInMonth - 2), daysInMonth);
-    const portfolioReviewDay = daysInMonth;
+    // 1. Map user tasks by deadline or dueDate
+    (tasks || []).forEach((task) => {
+      const d = parseAnyDate(task.deadline || task.dueDate);
+      if (d && d.getFullYear() === viewingYear && d.getMonth() === viewingMonth) {
+        const day = d.getDate();
+        if (!map[day]) {
+          map[day] = {
+            title: task.title,
+            tag: task.completed ? (language === "id" ? "Selesai" : "Completed") : (task.timeTag || (language === "id" ? "Tugas" : "Task")),
+            color: task.completed ? "bg-tertiary-container text-tertiary" : "bg-primary text-on-primary",
+            type: "task",
+            item: task
+          };
+        }
+      }
+    });
 
-    if (!map[sprintReviewDay]) {
-      map[sprintReviewDay] = { title: "Sprint Backlog Review", tag: "Review", color: "bg-surface-container text-on-surface" };
-    }
-    if (!map[authMigrationDay]) {
-      map[authMigrationDay] = { title: "M4 Auth Migration Deadline", tag: "Milestone", color: "bg-secondary-container text-primary" };
-    }
-    if (!map[releaseDay]) {
-      map[releaseDay] = { title: "Suru Core Engine Due", tag: "Release", color: "bg-primary-container text-on-primary" };
-    }
-    if (!map[portfolioReviewDay]) {
-      map[portfolioReviewDay] = { title: "Portfolio V2 Review", tag: "Review", color: "bg-tertiary-container text-tertiary" };
-    }
+    // 2. Map user goals by deadline
+    (goals || []).forEach((goal) => {
+      const d = parseAnyDate(goal.deadline);
+      if (d && d.getFullYear() === viewingYear && d.getMonth() === viewingMonth) {
+        const day = d.getDate();
+        if (!map[day]) {
+          map[day] = {
+            title: goal.title,
+            tag: language === "id" ? "Target" : "Goal",
+            color: "bg-secondary-container text-primary",
+            type: "goal",
+            item: goal
+          };
+        }
+      }
+    });
+
+    // 3. Map user projects by deadline
+    (projects || []).forEach((proj) => {
+      const d = parseAnyDate(proj.deadline);
+      if (d && d.getFullYear() === viewingYear && d.getMonth() === viewingMonth) {
+        const day = d.getDate();
+        if (!map[day]) {
+          map[day] = {
+            title: proj.title,
+            tag: language === "id" ? "Proyek" : "Project",
+            color: "bg-surface-container text-on-surface",
+            type: "project",
+            item: proj
+          };
+        }
+      }
+    });
+
     return map;
-  }, [todayDateNum, daysInMonth, language]);
+  }, [tasks, goals, projects, viewingYear, viewingMonth, language]);
 
   return (
     <div className="flex flex-col w-full gap-space-xl">
@@ -495,7 +560,48 @@ export function CalendarPage() {
 }
 
 export function StatisticsPage() {
-  const { t } = useWorkspace();
+  const { tasks, streakCount, bestStreakCount, currentDate, language, t } = useWorkspace();
+
+  const { currentMonday, currentSunday } = useMemo(() => {
+    const now = currentDate instanceof Date ? currentDate : new Date();
+    const day = now.getDay();
+    const diffToMonday = (day + 6) % 7;
+    const mon = new Date(now.getFullYear(), now.getMonth(), now.getDate() - diffToMonday, 0, 0, 0, 0);
+    const sun = new Date(mon.getFullYear(), mon.getMonth(), mon.getDate() + 6, 23, 59, 59, 999);
+    return { currentMonday: mon, currentSunday: sun };
+  }, [currentDate]);
+
+  const parseAnyDate = (dateVal) => {
+    if (!dateVal) return null;
+    if (dateVal instanceof Date) return isNaN(dateVal.getTime()) ? null : dateVal;
+    const str = String(dateVal).trim();
+    if (/^\d{4}-\d{2}-\d{2}/.test(str)) {
+      const [y, m, d] = str.slice(0, 10).split("-").map(Number);
+      return new Date(y, m - 1, d);
+    }
+    const parsed = new Date(str);
+    return isNaN(parsed.getTime()) ? null : parsed;
+  };
+
+  const completedTasks = useMemo(() => (tasks || []).filter((t) => t.completed), [tasks]);
+  const totalTasksCount = (tasks || []).length;
+  const completedTasksCount = completedTasks.length;
+
+  const weeklyCompletedTasks = useMemo(() => {
+    return completedTasks.filter((t) => {
+      const d = parseAnyDate(t.completedAt) || parseAnyDate(t.deadline);
+      return d && d >= currentMonday && d <= currentSunday;
+    });
+  }, [completedTasks, currentMonday, currentSunday]);
+
+  const weeklyVelocity = weeklyCompletedTasks.length;
+  const focusHours = (completedTasksCount * 1.5).toFixed(1);
+  const completionRate = totalTasksCount > 0
+    ? Math.round((completedTasksCount / totalTasksCount) * 100)
+    : 0;
+
+  const activeStreak = streakCount || 0;
+  const bestStreak = bestStreakCount || 0;
 
   return (
     <div className="flex flex-col w-full gap-space-xl">
@@ -523,10 +629,12 @@ export function StatisticsPage() {
             {t("secondary.statistics.weeklyVelocity")}
           </span>
           <div className="text-display font-display text-primary mt-1">
-            24 {t("secondary.statistics.tasksUnit")}
+            {weeklyVelocity} {t("secondary.statistics.tasksUnit")}
           </div>
           <span className="text-tertiary text-label-sm font-semibold">
-            {t("secondary.statistics.vsLastMonth")}
+            {weeklyVelocity > 0
+              ? (language === "id" ? `+${weeklyVelocity} tugas minggu ini` : `+${weeklyVelocity} tasks this week`)
+              : (language === "id" ? "0 tugas minggu ini" : "0 tasks this week")}
           </span>
         </div>
         <div className="bg-surface-container-lowest p-space-lg rounded-xl shadow-sm">
@@ -534,19 +642,23 @@ export function StatisticsPage() {
             {t("secondary.statistics.focusHours")}
           </span>
           <div className="text-display font-display text-on-surface mt-1">
-            38.5 {t("secondary.statistics.hoursUnit")}
+            {focusHours} {t("secondary.statistics.hoursUnit")}
           </div>
           <span className="text-on-surface-variant text-label-sm">
-            {t("secondary.statistics.avgPerDay")}
+            {completedTasksCount > 0
+              ? (language === "id" ? `Total ${completedTasksCount} tugas selesai` : `Total ${completedTasksCount} tasks completed`)
+              : (language === "id" ? "Belum ada waktu fokus" : "No focus hours yet")}
           </span>
         </div>
         <div className="bg-surface-container-lowest p-space-lg rounded-xl shadow-sm">
           <span className="font-label-sm text-label-sm text-on-surface-variant uppercase">
             {t("secondary.statistics.onTimeDelivery")}
           </span>
-          <div className="text-display font-display text-tertiary mt-1">88.5%</div>
+          <div className="text-display font-display text-tertiary mt-1">{completionRate}%</div>
           <span className="text-tertiary text-label-sm font-semibold">
-            {t("secondary.statistics.exceedsTarget")}
+            {completionRate > 0
+              ? (language === "id" ? `${completedTasksCount} dari ${totalTasksCount} selesai` : `${completedTasksCount} of ${totalTasksCount} completed`)
+              : (language === "id" ? "0 tugas selesai" : "0 tasks completed")}
           </span>
         </div>
         <div className="bg-surface-container-lowest p-space-lg rounded-xl shadow-sm">
@@ -554,10 +666,10 @@ export function StatisticsPage() {
             {t("secondary.statistics.activeStreak")}
           </span>
           <div className="text-display font-display text-primary mt-1">
-            6 {t("secondary.statistics.daysUnit")}
+            {activeStreak} {t("secondary.statistics.daysUnit")}
           </div>
           <span className="text-on-surface-variant text-label-sm">
-            {t("secondary.statistics.bestStreak")}
+            {language === "id" ? `Terbaik: ${bestStreak} hari` : `Best: ${bestStreak} day${bestStreak === 1 ? "" : "s"}`}
           </span>
         </div>
       </div>
