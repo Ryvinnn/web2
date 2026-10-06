@@ -1,10 +1,11 @@
 import React, { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useWorkspace } from "../context/WorkspaceContext";
+import { getCalendarDayDiff } from "../utils/attention";
 
 export default function ProjectsPage() {
   const navigate = useNavigate();
-  const { projects, goals, tasks, currentDate, openModal, openProjectModal, deleteProject, t, language } = useWorkspace();
+  const { projects, goals, tasks, user, currentDate, openModal, openProjectModal, deleteProject, t, language } = useWorkspace();
 
   const [statusFilter, setStatusFilter] = useState("all"); // 'all' | 'in-progress' | 'planning' | 'completed'
   const [viewMode, setViewMode] = useState("grid"); // 'grid' | 'kanban' | 'list'
@@ -12,9 +13,53 @@ export default function ProjectsPage() {
   const inProgressCount = useMemo(() => projects.filter((p) => p.status === "in-progress").length, [projects]);
   const planningCount = useMemo(() => projects.filter((p) => p.status === "planning").length, [projects]);
   const completedCount = useMemo(() => projects.filter((p) => p.status === "completed").length, [projects]);
-  const totalTasks = useMemo(() => projects.reduce((acc, p) => acc + (p.totalTasks || 0), 0), [projects]);
-  const completedTasks = useMemo(() => projects.reduce((acc, p) => acc + (p.completedTasks || 0), 0), [projects]);
-  const taskPercent = useMemo(() => (totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0), [totalTasks, completedTasks]);
+
+  // Dynamic task rollup across user's actual projects
+  const { totalTasks, completedTasks, taskPercent } = useMemo(() => {
+    let total = 0;
+    let completed = 0;
+    projects.forEach((p) => {
+      const pTasks = (tasks || []).filter(
+        (t) => t.projectId === p.id || (p.key && t.projectId === p.key) || t.project === p.title
+      );
+      if (pTasks.length > 0) {
+        total += pTasks.length;
+        completed += pTasks.filter((t) => t.completed).length;
+      } else {
+        total += Number(p.totalTasks) || 0;
+        completed += Number(p.completedTasks) || 0;
+      }
+    });
+    const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
+    return { totalTasks: total, completedTasks: completed, taskPercent: percent };
+  }, [projects, tasks]);
+
+  // Dynamic upcoming deadlines count (active projects due within 14 days)
+  const { upcomingDeadlinesCount, upcomingDeadlinesPercent } = useMemo(() => {
+    const count = projects.filter((p) => {
+      if (p.status === "completed" || !p.deadline) return false;
+      const diff = getCalendarDayDiff(p.deadline, currentDate);
+      return diff !== null && diff <= 14;
+    }).length;
+    const percent = projects.length > 0 ? Math.min(100, Math.round((count / projects.length) * 100)) : 0;
+    return { upcomingDeadlinesCount: count, upcomingDeadlinesPercent: percent };
+  }, [projects, currentDate]);
+
+  // Dynamic milestones delivery across all user's projects
+  const { totalMilestones, completedMilestones, milestonesPercent } = useMemo(() => {
+    let total = 0;
+    let completed = 0;
+    projects.forEach((p) => {
+      if (Array.isArray(p.milestones)) {
+        total += p.milestones.length;
+        completed += p.milestones.filter((m) => m.completed).length;
+      } else if (typeof p.milestones === "number") {
+        total += p.milestones;
+      }
+    });
+    const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
+    return { totalMilestones: total, completedMilestones: completed, milestonesPercent: percent };
+  }, [projects]);
 
   const sprintDays = useMemo(() => {
     const now = currentDate instanceof Date ? currentDate : new Date();
@@ -66,11 +111,30 @@ export default function ProjectsPage() {
 
   const approachingMilestones = useMemo(() => {
     const list = [];
+    // Prioritize uncompleted milestones from active projects
+    (projects || []).forEach((proj) => {
+      if (Array.isArray(proj.milestones)) {
+        proj.milestones.forEach((m, idx) => {
+          if (!m.completed) {
+            list.push({
+              id: m.id || `proj-${proj.id}-${idx}`,
+              title: m.title,
+              goalTitle: proj.title,
+              date: m.date || proj.deadline || "",
+              code: m.code || `M${idx + 1}`,
+              projectId: proj.id,
+              projectKey: proj.key
+            });
+          }
+        });
+      }
+    });
+    // Also include uncompleted milestones from goals
     (goals || []).forEach((goal) => {
       (goal.milestones || []).forEach((m, idx) => {
         if (!m.completed) {
           list.push({
-            id: m.id || `${goal.id}-${idx}`,
+            id: m.id || `goal-${goal.id}-${idx}`,
             title: m.title,
             goalTitle: goal.title,
             date: m.date || goal.targetDate || goal.deadline || "",
@@ -80,7 +144,7 @@ export default function ProjectsPage() {
       });
     });
     return list.slice(0, 3);
-  }, [goals]);
+  }, [projects, goals]);
 
   const filteredProjects = useMemo(() => {
     if (statusFilter === "all") return projects;
@@ -116,7 +180,7 @@ export default function ProjectsPage() {
           <button
             type="button"
             onClick={cycleFilter}
-            className="h-10 px-space-md sm:px-space-lg rounded-lg bg-surface-container-lowest text-on-surface font-headline-sm text-headline-sm shadow-sm hover:bg-surface-container-low transition-all flex items-center gap-space-sm"
+            className="h-10 px-space-md sm:px-space-lg rounded-lg bg-surface-container-lowest text-on-surface font-headline-sm text-headline-sm shadow-sm hover:bg-surface-container-low transition-all flex items-center gap-space-sm cursor-pointer"
           >
             <span className="material-symbols-outlined text-[18px] text-secondary">filter_list</span>
             <span>{t("common.filter")}: {statusFilter === "all" ? t("projects.allTab") : statusFilter === "in-progress" ? t("projects.inProgressTab") : statusFilter === "planning" ? t("projects.planningTab") : t("projects.completedTab")}</span>
@@ -124,7 +188,7 @@ export default function ProjectsPage() {
           <button
             type="button"
             onClick={() => openModal("project")}
-            className="h-10 px-space-lg sm:px-space-xl rounded-lg bg-primary-container text-on-primary font-headline-sm text-headline-sm shadow-sm hover:opacity-95 transition-all flex items-center gap-space-sm"
+            className="h-10 px-space-lg sm:px-space-xl rounded-lg bg-primary-container text-on-primary font-headline-sm text-headline-sm shadow-sm hover:opacity-95 transition-all flex items-center gap-space-sm cursor-pointer"
           >
             <span className="material-symbols-outlined text-[20px]">add</span>
             <span>{t("projects.newProjectBtn")}</span>
@@ -148,7 +212,7 @@ export default function ProjectsPage() {
             </span>
           </div>
           <div className="w-full bg-surface-container-low h-1.5 rounded-full mt-3 overflow-hidden">
-            <div className="bg-primary h-full rounded-full" style={{ width: `${projects.length > 0 ? (inProgressCount / projects.length) * 100 : 0}%` }}></div>
+            <div className="bg-primary h-full rounded-full transition-all duration-500" style={{ width: `${projects.length > 0 ? (inProgressCount / projects.length) * 100 : 0}%` }}></div>
           </div>
         </div>
 
@@ -166,7 +230,7 @@ export default function ProjectsPage() {
             <span className="font-label-sm text-label-sm text-on-surface-variant">{taskPercent}% {t("projects.totalTasks")}</span>
           </div>
           <div className="w-full bg-surface-container-low h-1.5 rounded-full mt-3 overflow-hidden">
-            <div className="bg-primary-container h-full rounded-full" style={{ width: `${taskPercent}%` }}></div>
+            <div className="bg-primary-container h-full rounded-full transition-all duration-500" style={{ width: `${taskPercent}%` }}></div>
           </div>
         </div>
 
@@ -178,11 +242,11 @@ export default function ProjectsPage() {
             </div>
           </div>
           <div className="flex items-baseline gap-space-sm">
-            <span className="font-display text-display text-on-surface">2</span>
+            <span className="font-display text-display text-on-surface">{upcomingDeadlinesCount}</span>
             <span className="font-label-sm text-label-sm text-error font-medium">{t("projects.withinDays")}</span>
           </div>
           <div className="w-full bg-surface-container-low h-1.5 rounded-full mt-3 overflow-hidden">
-            <div className="bg-error h-full rounded-full" style={{ width: "40%" }}></div>
+            <div className="bg-error h-full rounded-full transition-all duration-500" style={{ width: `${upcomingDeadlinesPercent}%` }}></div>
           </div>
         </div>
 
@@ -195,12 +259,12 @@ export default function ProjectsPage() {
           </div>
           <div className="flex items-baseline gap-space-sm">
             <span className="font-display text-display text-on-surface">
-              11<span className="font-headline-md text-headline-md text-on-surface-variant font-normal">/14</span>
+              {completedMilestones}<span className="font-headline-md text-headline-md text-on-surface-variant font-normal">/{totalMilestones}</span>
             </span>
-            <span className="font-label-sm text-label-sm text-tertiary font-semibold">78% {t("projects.achieved")}</span>
+            <span className="font-label-sm text-label-sm text-tertiary font-semibold">{milestonesPercent}% {t("projects.achieved")}</span>
           </div>
           <div className="w-full bg-surface-container-low h-1.5 rounded-full mt-3 overflow-hidden">
-            <div className="bg-tertiary-container h-full rounded-full" style={{ width: "78%" }}></div>
+            <div className="bg-tertiary-container h-full rounded-full transition-all duration-500" style={{ width: `${milestonesPercent}%` }}></div>
           </div>
         </div>
       </div>
@@ -313,177 +377,216 @@ export default function ProjectsPage() {
       {/* Projects Grid */}
       {viewMode === "grid" && (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-space-xl mb-space-2xl">
-        {filteredProjects.map((p) => (
-          <div
-            key={p.id}
-            onClick={() => openProjectModal(p.key)}
-            className="bg-surface-container-lowest rounded-xl shadow-sm hover:shadow-md transition-all flex flex-col justify-between overflow-hidden group cursor-pointer"
-          >
-            {/* Card Banner / Preview */}
-            <div className={`h-32 bg-gradient-to-br ${p.gradient || "from-surface-container to-secondary-container"} p-space-lg flex flex-col justify-between relative overflow-hidden`}>
-              {/* Cover Photo / Background */}
-              {p.coverImage ? (
-                <>
-                  <img
-                    src={p.coverImage}
-                    alt={p.title}
-                    className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                    style={{ objectPosition: `center ${p.coverImagePosition ?? 50}%` }}
-                  />
-                  {/* Subtle contrast gradient overlay */}
-                  <div className="absolute inset-0 bg-gradient-to-t from-surface-container-lowest/80 via-transparent to-black/25 pointer-events-none" />
-                </>
-              ) : (
-                /* Ambient visual overlay */
-                <svg className="absolute -right-4 -bottom-6 w-44 h-32 text-primary/10 pointer-events-none" fill="none" viewBox="0 0 100 100">
-                  <circle cx="80" cy="80" fill="currentColor" r="50"></circle>
-                  <path d="M0 80 Q 25 30, 50 60 T 100 20 L 100 100 L 0 100 Z" fill="currentColor" fillOpacity="0.2"></path>
-                </svg>
-              )}
+        {filteredProjects.map((p) => {
+          const pTasks = (tasks || []).filter(
+            (t) => t.projectId === p.id || (p.key && t.projectId === p.key) || t.project === p.title
+          );
+          const pTotalTasks = pTasks.length > 0 ? pTasks.length : (Number(p.totalTasks) || 0);
+          const pCompletedTasks = pTasks.length > 0
+            ? pTasks.filter((t) => t.completed).length
+            : (Number(p.completedTasks) || 0);
+          const pMilestonesCount = Array.isArray(p.milestones)
+            ? p.milestones.length
+            : (typeof p.milestones === "number" ? p.milestones : 0);
+          const ownerName = p.owner || user?.name || "Admin";
+          const ownerInitial = (ownerName[0] || "A").toUpperCase();
 
-              {/* Top Badges */}
-              <div className="flex items-center justify-between z-10">
-                <span className="px-2.5 py-0.5 rounded-full bg-surface-container-lowest/95 backdrop-blur-sm text-primary font-label-sm text-label-sm flex items-center gap-1 font-semibold shadow-xs">
-                  {p.status === "completed" ? (
-                    <>
-                      <span className="material-symbols-outlined text-[14px] text-tertiary">check</span>
-                      <span className="text-tertiary">{t("common.completed")}</span>
-                    </>
-                  ) : p.status === "planning" ? (
-                    <>
-                      <span className="w-1.5 h-1.5 rounded-full bg-secondary"></span>
-                      <span className="text-on-secondary-fixed-variant">{t("common.planning")}</span>
-                    </>
-                  ) : (
-                    <>
-                      <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span>
-                      <span className="text-primary font-semibold">{t("common.inProgress")}</span>
-                    </>
-                  )}
-                </span>
-                <div className="flex items-center gap-1">
-                  <span className="px-2.5 py-0.5 rounded-md bg-surface-container-lowest/95 backdrop-blur-sm text-on-surface-variant font-label-sm text-label-sm font-medium shadow-xs">
-                    {p.category}
+          return (
+            <div
+              key={p.id}
+              onClick={() => openProjectModal(p.key || p.id)}
+              className="bg-surface-container-lowest rounded-xl shadow-sm hover:shadow-md transition-all flex flex-col justify-between overflow-hidden group cursor-pointer"
+            >
+              {/* Card Banner / Preview */}
+              <div className={`h-32 bg-gradient-to-br ${p.gradient || "from-surface-container to-secondary-container"} p-space-lg flex flex-col justify-between relative overflow-hidden`}>
+                {/* Cover Photo / Background */}
+                {p.coverImage ? (
+                  <>
+                    <img
+                      src={p.coverImage}
+                      alt={p.title}
+                      className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                      style={{ objectPosition: `center ${p.coverImagePosition ?? 50}%` }}
+                    />
+                    {/* Subtle contrast gradient overlay */}
+                    <div className="absolute inset-0 bg-gradient-to-t from-surface-container-lowest/80 via-transparent to-black/25 pointer-events-none" />
+                  </>
+                ) : (
+                  /* Ambient visual overlay */
+                  <svg className="absolute -right-4 -bottom-6 w-44 h-32 text-primary/10 pointer-events-none" fill="none" viewBox="0 0 100 100">
+                    <circle cx="80" cy="80" fill="currentColor" r="50"></circle>
+                    <path d="M0 80 Q 25 30, 50 60 T 100 20 L 100 100 L 0 100 Z" fill="currentColor" fillOpacity="0.2"></path>
+                  </svg>
+                )}
+
+                {/* Top Badges */}
+                <div className="flex items-center justify-between z-10">
+                  <span className="px-2.5 py-0.5 rounded-full bg-surface-container-lowest/95 backdrop-blur-sm text-primary font-label-sm text-label-sm flex items-center gap-1 font-semibold shadow-xs">
+                    {p.status === "completed" ? (
+                      <>
+                        <span className="material-symbols-outlined text-[14px] text-tertiary">check</span>
+                        <span className="text-tertiary">{t("common.completed")}</span>
+                      </>
+                    ) : p.status === "planning" ? (
+                      <>
+                        <span className="w-1.5 h-1.5 rounded-full bg-secondary"></span>
+                        <span className="text-on-secondary-fixed-variant">{t("common.planning")}</span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span>
+                        <span className="text-primary font-semibold">{t("common.inProgress")}</span>
+                      </>
+                    )}
                   </span>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      openModal("project", p);
-                    }}
-                    title={t("common.edit")}
-                    className="w-7 h-7 rounded-full bg-surface-container-lowest/95 backdrop-blur-sm text-on-surface-variant hover:text-on-surface flex items-center justify-center shadow-xs transition-colors"
-                  >
-                    <span className="material-symbols-outlined text-[16px]">edit</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      openProjectModal(p.key);
-                    }}
-                    title={t("projectDetailModal.tabs.overview")}
-                    className="w-7 h-7 rounded-full bg-surface-container-lowest/95 backdrop-blur-sm text-on-surface-variant hover:text-on-surface flex items-center justify-center shadow-xs transition-colors"
-                  >
-                    <span className="material-symbols-outlined text-[16px]">info</span>
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Card Body */}
-            <div className="p-space-lg flex-1 flex flex-col justify-between">
-              <div>
-                {/* Linked Target & Icon (Moved from banner to white body above project title) */}
-                <div className="flex items-center gap-space-sm mb-space-sm">
-                  <div className="w-8 h-8 rounded-lg bg-surface-container text-primary flex items-center justify-center flex-shrink-0 shadow-xs">
-                    <span className="material-symbols-outlined text-[18px]">{p.icon || "dns"}</span>
-                  </div>
-                  <div className="flex flex-col min-w-0">
-                    <span className="font-label-sm text-label-sm text-on-surface-variant font-medium leading-tight">
-                      {t("projects.linkedTarget")}
+                  <div className="flex items-center gap-1">
+                    <span className="px-2.5 py-0.5 rounded-md bg-surface-container-lowest/95 backdrop-blur-sm text-on-surface-variant font-label-sm text-label-sm font-medium shadow-xs">
+                      {p.category}
                     </span>
-                    <span className="font-label-md text-label-md text-on-surface font-semibold truncate">
-                      {p.linkedGoal}
-                    </span>
-                  </div>
-                </div>
-
-                <h3 className="font-headline-md text-headline-md text-primary font-bold group-hover:text-primary-container transition-colors mb-space-xs">
-                  {p.title}
-                </h3>
-                <p className="font-body-md text-body-md text-on-surface-variant line-clamp-2 mb-space-lg">
-                  {p.description}
-                </p>
-                {/* Stack Tags */}
-                <div className="flex items-center flex-wrap gap-1.5 mb-space-lg">
-                  {(p.techStack || []).map((tech) => (
-                    <span
-                      key={tech}
-                      className="px-2 py-0.5 rounded bg-surface-container-low text-on-surface-variant font-label-sm text-label-sm"
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openModal("project", p);
+                      }}
+                      title={t("common.edit")}
+                      className="w-7 h-7 rounded-full bg-surface-container-lowest/95 backdrop-blur-sm text-on-surface-variant hover:text-on-surface flex items-center justify-center shadow-xs transition-colors cursor-pointer"
                     >
-                      {tech}
-                    </span>
-                  ))}
+                      <span className="material-symbols-outlined text-[16px]">edit</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openProjectModal(p.key || p.id);
+                      }}
+                      title={t("projectDetailModal.tabs.overview")}
+                      className="w-7 h-7 rounded-full bg-surface-container-lowest/95 backdrop-blur-sm text-on-surface-variant hover:text-on-surface flex items-center justify-center shadow-xs transition-colors cursor-pointer"
+                    >
+                      <span className="material-symbols-outlined text-[16px]">info</span>
+                    </button>
+                  </div>
                 </div>
               </div>
 
-              <div>
-                {/* Metric Progress */}
-                <div className="flex items-center justify-between text-on-surface mb-1.5">
-                  <span className="font-label-sm text-label-sm text-on-surface-variant">
-                    {t("projects.progressLabel")} ({p.completedTasks}/{p.totalTasks} {t("projects.totalTasks")})
-                  </span>
-                  <span
-                    className={`font-label-sm text-label-sm font-semibold ${
-                      p.progress === 100 ? "text-tertiary" : "text-primary"
-                    }`}
-                  >
-                    {p.progress}%
-                  </span>
-                </div>
-                <div className="w-full bg-surface-container-low h-2 rounded-full overflow-hidden mb-space-md">
-                  <div
-                    className={`h-full rounded-full transition-all duration-500 ${
-                      p.progress === 100 ? "bg-tertiary-container" : "bg-primary-container"
-                    }`}
-                    style={{ width: `${p.progress}%` }}
-                  ></div>
+              {/* Card Body */}
+              <div className="p-space-lg flex-1 flex flex-col justify-between">
+                <div>
+                  {/* Linked Target & Icon */}
+                  <div className="flex items-center gap-space-sm mb-space-sm">
+                    <div className="w-8 h-8 rounded-lg bg-surface-container text-primary flex items-center justify-center flex-shrink-0 shadow-xs">
+                      <span className="material-symbols-outlined text-[18px]">{p.icon || "dns"}</span>
+                    </div>
+                    <div className="flex flex-col min-w-0">
+                      <span className="font-label-sm text-label-sm text-on-surface-variant font-medium leading-tight">
+                        {t("projects.linkedTarget")}
+                      </span>
+                      <span className="font-label-md text-label-md text-on-surface font-semibold truncate">
+                        {p.linkedGoal || "—"}
+                      </span>
+                    </div>
+                  </div>
+
+                  <h3 className="font-headline-md text-headline-md text-primary font-bold group-hover:text-primary-container transition-colors mb-space-xs">
+                    {p.title}
+                  </h3>
+                  <p className="font-body-md text-body-md text-on-surface-variant line-clamp-2 mb-space-lg">
+                    {p.description}
+                  </p>
+                  {/* Stack Tags */}
+                  <div className="flex items-center flex-wrap gap-1.5 mb-space-lg">
+                    {(p.techStack || []).map((tech) => (
+                      <span
+                        key={tech}
+                        className="px-2 py-0.5 rounded bg-surface-container-low text-on-surface-variant font-label-sm text-label-sm"
+                      >
+                        {tech}
+                      </span>
+                    ))}
+                  </div>
                 </div>
 
-                {/* Footer Metadata */}
-                <div className="flex items-center justify-between pt-space-sm border-t border-surface-container">
-                  <div className="flex items-center gap-space-sm">
-                    <div className="w-6 h-6 rounded-full bg-primary text-on-primary flex items-center justify-center font-label-sm text-label-sm" title="Alex (Owner)">
-                      A
-                    </div>
+                <div>
+                  {/* Metric Progress */}
+                  <div className="flex items-center justify-between text-on-surface mb-1.5">
                     <span className="font-label-sm text-label-sm text-on-surface-variant">
-                      {p.milestones} {t("projects.milestonesCount")}
+                      {t("projects.progressLabel")} ({pCompletedTasks}/{pTotalTasks} {t("projects.totalTasks")})
+                    </span>
+                    <span
+                      className={`font-label-sm text-label-sm font-semibold ${
+                        p.progress === 100 ? "text-tertiary" : "text-primary"
+                      }`}
+                    >
+                      {p.progress}%
                     </span>
                   </div>
-                  <div className="flex items-center gap-1 text-on-surface-variant font-label-sm text-label-sm">
-                    <span className="material-symbols-outlined text-[15px]">event</span>
-                    <span>{p.deadline}</span>
+                  <div className="w-full bg-surface-container-low h-2 rounded-full overflow-hidden mb-space-md">
+                    <div
+                      className={`h-full rounded-full transition-all duration-500 ${
+                        p.progress === 100 ? "bg-tertiary-container" : "bg-primary-container"
+                      }`}
+                      style={{ width: `${p.progress}%` }}
+                    ></div>
+                  </div>
+
+                  {/* Footer Metadata */}
+                  <div className="flex items-center justify-between pt-space-sm border-t border-surface-container">
+                    <div className="flex items-center gap-space-sm">
+                      <div className="w-6 h-6 rounded-full bg-primary text-on-primary flex items-center justify-center font-label-sm text-label-sm" title={`${ownerName} (Owner)`}>
+                        {ownerInitial}
+                      </div>
+                      <span className="font-label-sm text-label-sm text-on-surface-variant">
+                        {pMilestonesCount} {t("projects.milestonesCount")}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1 text-on-surface-variant font-label-sm text-label-sm">
+                      <span className="material-symbols-outlined text-[15px]">event</span>
+                      <span>{p.deadline}</span>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
         {filteredProjects.length === 0 && (
           <div className="col-span-full bg-surface-container-lowest p-space-2xl rounded-xl shadow-sm flex flex-col items-center justify-center text-center">
-            <span className="material-symbols-outlined text-[40px] text-on-surface-variant mb-2">folder_open</span>
-            <h4 className="font-headline-sm text-headline-sm text-on-surface">{t("common.noData")}</h4>
-            <p className="text-body-sm text-on-surface-variant mt-1 mb-space-md">
-              {language === "id" ? "Tidak ada proyek yang sesuai dengan filter." : "No projects match the selected filter."}
+            <div className="w-16 h-16 rounded-full bg-surface-container flex items-center justify-center text-primary mb-3">
+              <span className="material-symbols-outlined text-[36px]">folder_open</span>
+            </div>
+            <h4 className="font-headline-md text-headline-md text-on-surface font-semibold">
+              {projects.length === 0
+                ? (language === "id" ? "Belum Ada Proyek" : "No Projects Yet")
+                : t("common.noData")}
+            </h4>
+            <p className="text-body-md text-on-surface-variant mt-1 mb-space-lg max-w-md">
+              {projects.length === 0
+                ? (language === "id"
+                    ? "Mulai inisiatif baru Anda dengan membuat proyek pertama beserta milestone dan targetnya."
+                    : "Start your initiatives by creating your first project with milestones and targets.")
+                : (language === "id"
+                    ? "Tidak ada proyek yang sesuai dengan filter yang dipilih."
+                    : "No projects match the selected filter.")}
             </p>
-            <button
-              type="button"
-              onClick={() => openModal("project")}
-              className="px-4 py-2 rounded-lg bg-primary text-on-primary text-label-md font-medium shadow-sm hover:bg-primary-container transition-colors cursor-pointer"
-            >
-              {t("projects.newProjectBtn")}
-            </button>
+            <div className="flex items-center gap-3">
+              {projects.length > 0 && statusFilter !== "all" && (
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter("all")}
+                  className="px-4 py-2 rounded-lg bg-surface-container-low hover:bg-surface-container text-on-surface text-label-md font-semibold transition-colors cursor-pointer"
+                >
+                  {language === "id" ? "Lihat Semua Proyek" : "View All Projects"}
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => openModal("project")}
+                className="px-4 py-2 rounded-lg bg-primary text-on-primary text-label-md font-semibold shadow-sm hover:bg-primary-container transition-colors cursor-pointer flex items-center gap-1.5"
+              >
+                <span className="material-symbols-outlined text-[18px]">add</span>
+                <span>{t("projects.newProjectBtn")}</span>
+              </button>
+            </div>
           </div>
         )}
       </div>
@@ -510,28 +613,37 @@ export default function ProjectsPage() {
                   </span>
                 </div>
                 <div className="flex flex-col gap-space-sm min-h-[140px]">
-                  {colProjects.map((p) => (
-                    <div
-                      key={p.id}
-                      onClick={() => openProjectModal(p.key)}
-                      className="bg-surface-container-lowest p-space-md rounded-lg shadow-sm hover:shadow-md transition-all cursor-pointer flex flex-col gap-2 group border border-transparent hover:border-primary/30"
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="font-label-sm text-label-sm font-mono text-on-surface-variant">{p.code || "IGN-01"}</span>
-                        <span className="text-[12px] text-on-surface-variant flex items-center gap-1">
-                          <span className="material-symbols-outlined text-[14px]">event</span> {p.deadline}
-                        </span>
+                  {colProjects.map((p) => {
+                    const pTasks = (tasks || []).filter(
+                      (t) => t.projectId === p.id || (p.key && t.projectId === p.key) || t.project === p.title
+                    );
+                    const pTotalTasks = pTasks.length > 0 ? pTasks.length : (Number(p.totalTasks) || 0);
+                    const pCompletedTasks = pTasks.length > 0
+                      ? pTasks.filter((t) => t.completed).length
+                      : (Number(p.completedTasks) || 0);
+                    return (
+                      <div
+                        key={p.id}
+                        onClick={() => openProjectModal(p.key || p.id)}
+                        className="bg-surface-container-lowest p-space-md rounded-lg shadow-sm hover:shadow-md transition-all cursor-pointer flex flex-col gap-2 group border border-transparent hover:border-primary/30"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="font-label-sm text-label-sm font-mono text-on-surface-variant">{p.code || "IGN-01"}</span>
+                          <span className="text-[12px] text-on-surface-variant flex items-center gap-1">
+                            <span className="material-symbols-outlined text-[14px]">event</span> {p.deadline}
+                          </span>
+                        </div>
+                        <h4 className="font-headline-sm text-headline-sm text-on-surface font-semibold group-hover:text-primary transition-colors line-clamp-1">
+                          {p.title}
+                        </h4>
+                        <p className="font-body-sm text-body-sm text-on-surface-variant line-clamp-2">{p.description}</p>
+                        <div className="pt-2 border-t border-surface-container flex items-center justify-between">
+                          <span className="text-[12px] text-on-surface-variant font-medium">{pCompletedTasks}/{pTotalTasks} {t("dashboard.stats.tasks")}</span>
+                          <span className="text-[12px] font-bold text-primary">{p.progress}%</span>
+                        </div>
                       </div>
-                      <h4 className="font-headline-sm text-headline-sm text-on-surface font-semibold group-hover:text-primary transition-colors line-clamp-1">
-                        {p.title}
-                      </h4>
-                      <p className="font-body-sm text-body-sm text-on-surface-variant line-clamp-2">{p.description}</p>
-                      <div className="pt-2 border-t border-surface-container flex items-center justify-between">
-                        <span className="text-[12px] text-on-surface-variant font-medium">{p.completedTasks}/{p.totalTasks} {t("dashboard.stats.tasks")}</span>
-                        <span className="text-[12px] font-bold text-primary">{p.progress}%</span>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                   {colProjects.length === 0 && (
                     <div className="flex items-center justify-center p-space-xl border-2 border-dashed border-outline-variant/40 rounded-lg text-on-surface-variant font-label-sm text-label-sm">
                       {t("common.noData")}
@@ -559,75 +671,86 @@ export default function ProjectsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-surface-container font-body-sm text-body-sm">
-              {filteredProjects.map((p) => (
-                <tr
-                  key={p.id}
-                  onClick={() => openProjectModal(p.key)}
-                  className="hover:bg-surface-container-low transition-colors cursor-pointer group"
-                >
-                  <td className="py-space-md px-space-lg font-medium text-on-surface flex items-center gap-space-sm">
-                    <div className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center flex-shrink-0">
-                      <span className="material-symbols-outlined text-[18px]">{p.icon || "web"}</span>
-                    </div>
-                    <div>
-                      <span className="font-semibold text-on-surface group-hover:text-primary transition-colors block">{p.title}</span>
-                      <span className="font-label-sm text-label-sm text-on-surface-variant">{p.code || "IGN-01"}</span>
-                    </div>
-                  </td>
-                  <td className="py-space-md px-space-md">
-                    <span className={`px-2 py-0.5 rounded-full font-label-sm text-label-sm font-semibold ${
-                      p.status === "completed" ? "bg-tertiary-container/30 text-tertiary" : p.status === "planning" ? "bg-surface-container text-on-surface-variant" : "bg-primary/10 text-primary"
-                    }`}>
-                      {p.status === "completed" ? t("common.completed") : p.status === "planning" ? t("common.planning") : t("common.inProgress")}
-                    </span>
-                  </td>
-                  <td className="py-space-md px-space-md">
-                    <div className="w-28 flex items-center gap-2">
-                      <div className="flex-1 bg-surface-container-high h-1.5 rounded-full overflow-hidden">
-                        <div className="bg-primary h-full rounded-full" style={{ width: `${p.progress}%` }}></div>
+              {filteredProjects.map((p) => {
+                const pTasks = (tasks || []).filter(
+                  (t) => t.projectId === p.id || (p.key && t.projectId === p.key) || t.project === p.title
+                );
+                const pTotalTasks = pTasks.length > 0 ? pTasks.length : (Number(p.totalTasks) || 0);
+                const pCompletedTasks = pTasks.length > 0
+                  ? pTasks.filter((t) => t.completed).length
+                  : (Number(p.completedTasks) || 0);
+                return (
+                  <tr
+                    key={p.id}
+                    onClick={() => openProjectModal(p.key || p.id)}
+                    className="hover:bg-surface-container-low transition-colors cursor-pointer group"
+                  >
+                    <td className="py-space-md px-space-lg font-medium text-on-surface flex items-center gap-space-sm">
+                      <div className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center flex-shrink-0">
+                        <span className="material-symbols-outlined text-[18px]">{p.icon || "web"}</span>
                       </div>
-                      <span className="font-bold text-[12px]">{p.progress}%</span>
-                    </div>
-                  </td>
-                  <td className="py-space-md px-space-md text-on-surface-variant font-medium">
-                    {p.completedTasks}/{p.totalTasks}
-                  </td>
-                  <td className="py-space-md px-space-md text-on-surface-variant">
-                    {p.deadline}
-                  </td>
-                  <td className="py-space-md px-space-lg text-right">
-                    <div className="flex items-center justify-end gap-1.5">
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openProjectModal(p.key);
-                        }}
-                        className="px-2.5 py-1 rounded bg-surface-container hover:bg-surface-container-high text-primary font-label-sm text-label-sm font-semibold transition-colors"
-                      >
-                        {language === "id" ? "Detail" : "Details"}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (window.confirm(language === "id" ? `Hapus proyek "${p.title}"?` : `Delete project "${p.title}"?`)) {
-                            deleteProject(p.id);
-                          }
-                        }}
-                        className="p-1 rounded text-on-surface-variant hover:text-error hover:bg-error-container/30 transition-colors"
-                        title={t("common.delete")}
-                      >
-                        <span className="material-symbols-outlined text-[18px]">delete</span>
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                      <div>
+                        <span className="font-semibold text-on-surface group-hover:text-primary transition-colors block">{p.title}</span>
+                        <span className="font-label-sm text-label-sm text-on-surface-variant">{p.code || "IGN-01"}</span>
+                      </div>
+                    </td>
+                    <td className="py-space-md px-space-md">
+                      <span className={`px-2 py-0.5 rounded-full font-label-sm text-label-sm font-semibold ${
+                        p.status === "completed" ? "bg-tertiary-container/30 text-tertiary" : p.status === "planning" ? "bg-surface-container text-on-surface-variant" : "bg-primary/10 text-primary"
+                      }`}>
+                        {p.status === "completed" ? t("common.completed") : p.status === "planning" ? t("common.planning") : t("common.inProgress")}
+                      </span>
+                    </td>
+                    <td className="py-space-md px-space-md">
+                      <div className="w-28 flex items-center gap-2">
+                        <div className="flex-1 bg-surface-container-high h-1.5 rounded-full overflow-hidden">
+                          <div className="bg-primary h-full rounded-full" style={{ width: `${p.progress}%` }}></div>
+                        </div>
+                        <span className="font-bold text-[12px]">{p.progress}%</span>
+                      </div>
+                    </td>
+                    <td className="py-space-md px-space-md text-on-surface-variant font-medium">
+                      {pCompletedTasks}/{pTotalTasks}
+                    </td>
+                    <td className="py-space-md px-space-md text-on-surface-variant">
+                      {p.deadline}
+                    </td>
+                    <td className="py-space-md px-space-lg text-right">
+                      <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openProjectModal(p.key || p.id);
+                          }}
+                          className="px-2.5 py-1 rounded bg-surface-container hover:bg-surface-container-high text-primary font-label-sm text-label-sm font-semibold transition-colors cursor-pointer"
+                        >
+                          {language === "id" ? "Detail" : "Details"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (window.confirm(language === "id" ? `Hapus proyek "${p.title}"?` : `Delete project "${p.title}"?`)) {
+                              deleteProject(p.id);
+                            }
+                          }}
+                          className="p-1 rounded text-on-surface-variant hover:text-error hover:bg-error-container/30 transition-colors cursor-pointer"
+                          title={t("common.delete")}
+                        >
+                          <span className="material-symbols-outlined text-[18px]">delete</span>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
               {filteredProjects.length === 0 && (
                 <tr>
                   <td colSpan={6} className="py-space-2xl text-center text-on-surface-variant font-label-md">
-                    {t("common.noData")}
+                    {projects.length === 0
+                      ? (language === "id" ? "Belum ada proyek dibuat." : "No projects created yet.")
+                      : t("common.noData")}
                   </td>
                 </tr>
               )}
@@ -705,14 +828,24 @@ export default function ProjectsPage() {
                 </span>
                 <p className="font-body-sm text-body-sm text-on-surface-variant mt-1 max-w-xs">
                   {language === "id"
-                    ? "Milestone dari target strategis yang belum selesai akan ditampilkan di sini."
-                    : "Uncompleted milestones from strategic goals will be displayed here."}
+                    ? "Milestone dari proyek dan target strategis yang belum selesai akan ditampilkan di sini."
+                    : "Uncompleted milestones from projects and strategic goals will be displayed here."}
                 </p>
               </div>
             ) : (
               <div className="flex flex-col gap-space-md">
                 {approachingMilestones.map((m, idx) => (
-                  <div key={m.id || idx} className="flex items-start gap-space-md p-space-sm rounded-lg hover:bg-surface-container-low transition-colors">
+                  <div
+                    key={m.id || idx}
+                    onClick={() => {
+                      if (m.projectId || m.projectKey) {
+                        openProjectModal(m.projectKey || m.projectId);
+                      }
+                    }}
+                    className={`flex items-start gap-space-md p-space-sm rounded-lg hover:bg-surface-container-low transition-colors ${
+                      m.projectId || m.projectKey ? "cursor-pointer" : ""
+                    }`}
+                  >
                     <div className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center flex-shrink-0 mt-0.5">
                       <span className="material-symbols-outlined text-[18px]">verified_user</span>
                     </div>

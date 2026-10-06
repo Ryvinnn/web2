@@ -13,12 +13,38 @@ export default function ProjectDetailModal() {
     toggleTask,
     openModal,
     deleteProject,
+    toggleProjectMilestone,
+    addProjectMilestone,
+    deleteProjectMilestone,
+    addNote,
+    deleteNote,
     showToast,
     t,
     language
   } = useWorkspace();
   const { isOpen, projectKey } = projectModalState;
   const [activeTab, setActiveTab] = useState("overview");
+
+  // Inline milestone addition state
+  const [isAddingMilestone, setIsAddingMilestone] = useState(false);
+  const [newMilestoneTitle, setNewMilestoneTitle] = useState("");
+
+  // Functional note creation state
+  const [isCreatingNote, setIsCreatingNote] = useState(false);
+  const [noteTitle, setNoteTitle] = useState("");
+  const [noteContent, setNoteContent] = useState("");
+  const [noteCategory, setNoteCategory] = useState("Architecture");
+  const [noteError, setNoteError] = useState("");
+
+  // Reset local states when active project or modal state changes
+  useEffect(() => {
+    setIsAddingMilestone(false);
+    setNewMilestoneTitle("");
+    setIsCreatingNote(false);
+    setNoteTitle("");
+    setNoteContent("");
+    setNoteError("");
+  }, [projectKey, isOpen]);
 
   // Escape key listener to close modal
   useEffect(() => {
@@ -34,17 +60,46 @@ export default function ProjectDetailModal() {
   if (!isOpen) return null;
 
   const project =
-    projects.find((p) => p.key === projectKey) ||
-    projects.find((p) => p.id === projectKey) ||
-    projects[0];
+    projects.find((p) => p.id === projectKey || p.key === projectKey) ||
+    projects.find((p) => p.title?.toLowerCase() === String(projectKey).toLowerCase()) ||
+    (projects.length > 0 ? projects[0] : null);
 
   if (!project) return null;
 
   const projectTasks = tasks.filter(
     (t) =>
-      t.project === project.title ||
       t.projectId === project.id ||
-      t.project?.toLowerCase().includes(project.title?.toLowerCase())
+      (project.key && t.projectId === project.key) ||
+      t.project === project.title ||
+      (project.title && t.project?.toLowerCase() === project.title?.toLowerCase())
+  );
+
+  const projectMilestones = Array.isArray(project.milestones) ? project.milestones : [];
+  const completedMilestonesCount = projectMilestones.filter((m) => m.completed).length;
+  const milestonePercent = projectMilestones.length > 0
+    ? Math.round((completedMilestonesCount / projectMilestones.length) * 100)
+    : 0;
+
+  const projectNotes = notes.filter(
+    (n) =>
+      n.projectId === project.id ||
+      (project.key && n.projectId === project.key) ||
+      (n.project && n.project === project.title)
+  );
+
+  const totalTasksCount = projectTasks.length > 0 ? projectTasks.length : (Number(project.totalTasks) || 0);
+  const completedTasksCount = projectTasks.length > 0
+    ? projectTasks.filter((t) => t.completed).length
+    : (Number(project.completedTasks) || 0);
+
+  const displayProgress = project.progress !== undefined ? project.progress : (
+    projectMilestones.length > 0 && totalTasksCount > 0
+      ? Math.round(((completedTasksCount + completedMilestonesCount) / (totalTasksCount + projectMilestones.length)) * 100)
+      : projectMilestones.length > 0
+      ? Math.round((completedMilestonesCount / projectMilestones.length) * 100)
+      : totalTasksCount > 0
+      ? Math.round((completedTasksCount / totalTasksCount) * 100)
+      : 0
   );
 
   const getStatusText = () => {
@@ -87,7 +142,7 @@ export default function ProjectDetailModal() {
                 {project.title}
               </h2>
               <p className="font-body-sm sm:font-body-md text-body-sm sm:text-body-md text-on-surface-variant mt-1">
-                {t("projectDetailModal.goalPrefix")} {project.linkedGoal} • {t("projectDetailModal.deadlinePrefix")} {project.deadline}
+                {t("projectDetailModal.goalPrefix")} {project.linkedGoal || (language === "id" ? "Umum" : "General")} • {t("projectDetailModal.deadlinePrefix")} {project.deadline}
               </p>
             </div>
           </div>
@@ -148,7 +203,7 @@ export default function ProjectDetailModal() {
           >
             {t("projectDetailModal.tabs.tasks")}{" "}
             <span className="px-1.5 py-0.2 rounded-full bg-surface-container text-on-surface-variant font-label-sm text-label-sm">
-              {projectTasks.length || project.totalTasks || 0}
+              {totalTasksCount}
             </span>
           </button>
           <button
@@ -162,7 +217,7 @@ export default function ProjectDetailModal() {
           >
             {t("projectDetailModal.tabs.milestones")}{" "}
             <span className="px-1.5 py-0.2 rounded-full bg-surface-container text-on-surface-variant font-label-sm text-label-sm">
-              {project.milestones || 3}
+              {projectMilestones.length}
             </span>
           </button>
           <button
@@ -176,7 +231,7 @@ export default function ProjectDetailModal() {
           >
             {t("projectDetailModal.tabs.notes")}{" "}
             <span className="px-1.5 py-0.2 rounded-full bg-surface-container text-on-surface-variant font-label-sm text-label-sm">
-              {notes.length}
+              {projectNotes.length}
             </span>
           </button>
         </div>
@@ -202,13 +257,13 @@ export default function ProjectDetailModal() {
                         d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
                         fill="none"
                         stroke="currentColor"
-                        strokeDasharray={`${project.progress || 84}, 100`}
+                        strokeDasharray={`${displayProgress}, 100`}
                         strokeLinecap="round"
                         strokeWidth="3.5"
                       ></path>
                     </svg>
                     <span className="absolute font-headline-sm text-headline-sm text-on-surface font-bold">
-                      {project.progress}%
+                      {displayProgress}%
                     </span>
                   </div>
                   <div>
@@ -217,8 +272,8 @@ export default function ProjectDetailModal() {
                     </h4>
                     <p className="font-body-sm text-body-sm text-on-surface-variant">
                       {t("projectDetailModal.sprintPhaseDesc", {
-                        done: project.completedTasks,
-                        total: project.totalTasks
+                        done: completedTasksCount,
+                        total: totalTasksCount
                       })}
                     </p>
                   </div>
@@ -248,11 +303,11 @@ export default function ProjectDetailModal() {
                       onClick={() => setActiveTab("tasks")}
                       className="font-label-sm text-label-sm text-primary font-semibold cursor-pointer hover:underline"
                     >
-                      {t("projectDetailModal.viewAllTasks", { total: projectTasks.length || project.totalTasks })}
+                      {t("projectDetailModal.viewAllTasks", { total: totalTasksCount })}
                     </span>
                   </div>
                   <div className="space-y-space-xs">
-                    {(projectTasks.length > 0 ? projectTasks.slice(0, 4) : tasks.slice(0, 4)).map((tItem) => (
+                    {projectTasks.slice(0, 4).map((tItem) => (
                       <div
                         key={tItem.id}
                         onClick={() => toggleTask(tItem.id)}
@@ -277,6 +332,11 @@ export default function ProjectDetailModal() {
                         </span>
                       </div>
                     ))}
+                    {projectTasks.length === 0 && (
+                      <div className="p-4 text-center text-on-surface-variant text-body-sm bg-surface-container-low rounded-lg">
+                        {language === "id" ? "Belum ada tugas untuk proyek ini." : "No tasks for this project yet."}
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -305,7 +365,7 @@ export default function ProjectDetailModal() {
                         <span className="font-label-sm text-label-sm text-on-surface-variant block">
                           {t("projectDetailModal.repositoryLabel")}
                         </span>
-                        <span className="font-body-sm text-body-sm font-semibold text-primary">
+                        <span className="font-body-sm text-body-sm font-semibold text-primary truncate block">
                           suru/{project.key || "core"}
                         </span>
                       </div>
@@ -323,7 +383,7 @@ export default function ProjectDetailModal() {
                         {t("projectDetailModal.technologiesLabel")}
                       </span>
                       <div className="flex flex-wrap gap-1.5">
-                        {project.techStack?.map((tech) => (
+                        {(project.techStack || ["React", "Tailwind CSS"]).map((tech) => (
                           <span
                             key={tech}
                             className="px-2 py-0.5 rounded bg-surface-container-lowest text-on-surface-variant font-label-sm text-label-sm font-medium"
@@ -347,8 +407,8 @@ export default function ProjectDetailModal() {
                 </h4>
                 <button
                   type="button"
-                  onClick={() => openModal("task", { category: project.title })}
-                  className="px-3 py-1.5 rounded-lg bg-primary text-on-primary font-label-md text-label-md flex items-center gap-1 shadow-sm"
+                  onClick={() => openModal("task", { category: project.title, projectId: project.id })}
+                  className="px-3 py-1.5 rounded-lg bg-primary text-on-primary font-label-md text-label-md flex items-center gap-1 shadow-sm cursor-pointer"
                 >
                   <span className="material-symbols-outlined text-[16px]">add</span>
                   <span>{t("tasks.newTaskBtn")}</span>
@@ -357,14 +417,15 @@ export default function ProjectDetailModal() {
 
               <div className="space-y-2">
                 {projectTasks.length === 0 ? (
-                  <div className="p-8 text-center bg-surface-container-low rounded-xl text-on-surface-variant">
+                  <div className="p-8 text-center bg-surface-container-low rounded-xl text-on-surface-variant flex flex-col items-center">
+                    <span className="material-symbols-outlined text-[36px] text-on-surface-variant/70 mb-2">check_circle</span>
                     <p className="font-body-md text-body-md">
                       {language === "id" ? "Belum ada tugas khusus untuk proyek ini." : "No specific tasks for this project yet."}
                     </p>
                     <button
                       type="button"
-                      onClick={() => openModal("task", { category: project.title })}
-                      className="mt-3 text-primary font-semibold hover:underline"
+                      onClick={() => openModal("task", { category: project.title, projectId: project.id })}
+                      className="mt-3 text-primary font-semibold hover:underline cursor-pointer"
                     >
                       {t("tasks.newTaskBtn")}
                     </button>
@@ -404,40 +465,164 @@ export default function ProjectDetailModal() {
 
           {activeTab === "milestones" && (
             <div className="space-y-space-md">
-              <h4 className="font-headline-sm text-headline-sm text-on-surface">
-                {t("projectDetailModal.tabs.milestones")}
-              </h4>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-space-sm">
+                <div>
+                  <h4 className="font-headline-sm text-headline-sm text-on-surface">
+                    {t("projectDetailModal.tabs.milestones")}
+                  </h4>
+                  <p className="text-body-sm text-on-surface-variant">
+                    {language === "id"
+                      ? `${completedMilestonesCount} dari ${projectMilestones.length} milestone diselesaikan (${milestonePercent}%)`
+                      : `${completedMilestonesCount} of ${projectMilestones.length} milestones completed (${milestonePercent}%)`}
+                  </p>
+                </div>
+                {!isAddingMilestone && (
+                  <button
+                    type="button"
+                    onClick={() => setIsAddingMilestone(true)}
+                    className="px-3 py-1.5 rounded-lg bg-primary text-on-primary font-label-md text-label-md flex items-center gap-1 shadow-sm self-start sm:self-auto cursor-pointer hover:bg-primary-container transition-colors"
+                  >
+                    <span className="material-symbols-outlined text-[16px]">add</span>
+                    <span>{language === "id" ? "Tambah Milestone" : "Add Milestone"}</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Inline Add Milestone Form */}
+              {isAddingMilestone && (
+                <div className="p-space-md rounded-xl bg-surface-container-low border border-primary/20 space-y-3 animate-in fade-in duration-150">
+                  <div className="flex items-center justify-between">
+                    <span className="text-headline-sm font-semibold text-on-surface text-[14px]">
+                      {language === "id" ? "Tambah Milestone Baru" : "Add New Milestone"}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => { setIsAddingMilestone(false); setNewMilestoneTitle(""); }}
+                      className="text-on-surface-variant hover:text-on-surface p-1 rounded-lg cursor-pointer"
+                    >
+                      <span className="material-symbols-outlined text-[18px]">close</span>
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={newMilestoneTitle}
+                      onChange={(e) => setNewMilestoneTitle(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          if (newMilestoneTitle.trim()) {
+                            addProjectMilestone(project.id, newMilestoneTitle.trim());
+                            setNewMilestoneTitle("");
+                            setIsAddingMilestone(false);
+                          }
+                        }
+                      }}
+                      placeholder={language === "id" ? "Judul milestone baru (e.g. Desain Arsitektur)..." : "New milestone title (e.g. Architecture Design)..."}
+                      className="flex-1 px-3 py-2 rounded-lg bg-surface-container-lowest text-on-surface font-body-sm text-body-sm border border-surface-container focus:outline-none focus:ring-1 focus:ring-primary"
+                      autoFocus
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (newMilestoneTitle.trim()) {
+                          addProjectMilestone(project.id, newMilestoneTitle.trim());
+                          setNewMilestoneTitle("");
+                          setIsAddingMilestone(false);
+                        }
+                      }}
+                      className="px-4 py-2 rounded-lg bg-primary text-on-primary font-label-md text-label-md font-semibold hover:bg-primary-container transition-colors cursor-pointer"
+                    >
+                      {t("common.save") || "Simpan"}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Milestones List */}
               <div className="space-y-3">
-                <div className="p-space-md rounded-xl bg-surface-container-low flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <span className="material-symbols-outlined text-tertiary text-[22px]">verified</span>
-                    <div>
-                      <h5 className="font-headline-sm text-headline-sm text-on-surface">M1: Wireframing &amp; Architecture Design</h5>
-                      <span className="font-label-sm text-label-sm text-tertiary font-semibold">{t("common.completed")}</span>
+                {projectMilestones.map((m, idx) => (
+                  <div
+                    key={m.id || idx}
+                    className={`p-space-md rounded-xl transition-all flex items-center justify-between group ${
+                      m.completed ? "bg-tertiary-container/10 border border-tertiary/20" : "bg-surface-container-low hover:bg-surface-container border border-transparent"
+                    }`}
+                  >
+                    <div
+                      className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer"
+                      onClick={() => toggleProjectMilestone(project.id, m.id)}
+                    >
+                      <button
+                        type="button"
+                        className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 transition-colors cursor-pointer ${
+                          m.completed ? "bg-tertiary text-on-tertiary" : "bg-surface-container text-outline hover:text-primary"
+                        }`}
+                        title={m.completed ? t("common.completed") : t("common.inProgress")}
+                      >
+                        <span className="material-symbols-outlined text-[18px]">
+                          {m.completed ? "check" : "radio_button_unchecked"}
+                        </span>
+                      </button>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-label-sm text-label-sm font-mono text-on-surface-variant font-bold">
+                            M{idx + 1}
+                          </span>
+                          <h5 className={`font-headline-sm text-headline-sm truncate ${
+                            m.completed ? "line-through text-on-surface-variant" : "text-on-surface font-semibold"
+                          }`}>
+                            {m.title}
+                          </h5>
+                        </div>
+                        <span className={`font-label-sm text-label-sm font-medium ${
+                          m.completed ? "text-tertiary" : "text-on-surface-variant"
+                        }`}>
+                          {m.completed ? (t("common.completed") || "Selesai") : (t("common.inProgress") || "Dalam Proses")}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 ml-2 flex-shrink-0">
+                      <span className={`px-2.5 py-1 rounded font-bold text-xs ${
+                        m.completed ? "bg-tertiary/10 text-tertiary" : "bg-surface-container text-on-surface-variant"
+                      }`}>
+                        {m.completed ? "100%" : "0%"}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          deleteProjectMilestone(project.id, m.id);
+                        }}
+                        className="w-7 h-7 rounded-lg text-on-surface-variant hover:text-error hover:bg-error-container/30 flex items-center justify-center transition-colors cursor-pointer opacity-70 group-hover:opacity-100"
+                        title={t("common.delete")}
+                      >
+                        <span className="material-symbols-outlined text-[16px]">delete</span>
+                      </button>
                     </div>
                   </div>
-                  <span className="px-2.5 py-1 rounded bg-tertiary/10 text-tertiary font-bold text-xs">100%</span>
-                </div>
-                <div className="p-space-md rounded-xl bg-surface-container-low flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <span className="material-symbols-outlined text-primary text-[22px]">hourglass_top</span>
-                    <div>
-                      <h5 className="font-headline-sm text-headline-sm text-on-surface">M2: Core API &amp; Component Construction</h5>
-                      <span className="font-label-sm text-label-sm text-primary font-semibold">{t("common.inProgress")}</span>
-                    </div>
+                ))}
+
+                {projectMilestones.length === 0 && (
+                  <div className="p-8 text-center bg-surface-container-low rounded-xl text-on-surface-variant flex flex-col items-center">
+                    <span className="material-symbols-outlined text-[40px] text-on-surface-variant/70 mb-2">flag</span>
+                    <h5 className="font-headline-sm text-headline-sm text-on-surface font-semibold">
+                      {language === "id" ? "Belum Ada Milestone" : "No Milestones Yet"}
+                    </h5>
+                    <p className="font-body-sm text-body-sm text-on-surface-variant mt-1 max-w-sm">
+                      {language === "id"
+                        ? "Proyek ini belum memiliki milestone. Tambahkan milestone untuk memecah deliverable proyek secara bertahap."
+                        : "This project has no milestones yet. Add milestones to track major deliverable phases."}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setIsAddingMilestone(true)}
+                      className="mt-4 px-4 py-2 rounded-lg bg-primary text-on-primary font-label-md text-label-md font-semibold hover:bg-primary-container transition-colors cursor-pointer shadow-sm flex items-center gap-1.5"
+                    >
+                      <span className="material-symbols-outlined text-[16px]">add</span>
+                      <span>{language === "id" ? "Tambah Milestone Pertama" : "Add First Milestone"}</span>
+                    </button>
                   </div>
-                  <span className="px-2.5 py-1 rounded bg-primary/10 text-primary font-bold text-xs">75%</span>
-                </div>
-                <div className="p-space-md rounded-xl bg-surface-container-low flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <span className="material-symbols-outlined text-outline text-[22px]">pending</span>
-                    <div>
-                      <h5 className="font-headline-sm text-headline-sm text-on-surface">M3: Production Hardening &amp; Rollout</h5>
-                      <span className="font-label-sm text-label-sm text-on-surface-variant">{t("common.planning")}</span>
-                    </div>
-                  </div>
-                  <span className="px-2.5 py-1 rounded bg-surface-container text-on-surface-variant font-bold text-xs">0%</span>
-                </div>
+                )}
               </div>
             </div>
           )}
@@ -445,32 +630,210 @@ export default function ProjectDetailModal() {
           {activeTab === "notes" && (
             <div className="space-y-space-md">
               <div className="flex items-center justify-between">
-                <h4 className="font-headline-sm text-headline-sm text-on-surface">
-                  {language === "id" ? "Catatan Proyek" : "Project Notes"}
-                </h4>
-                <button
-                  type="button"
-                  onClick={() => openModal("note", { category: project.category })}
-                  className="px-3 py-1.5 rounded-lg bg-primary text-on-primary font-label-md text-label-md flex items-center gap-1 shadow-sm"
-                >
-                  <span className="material-symbols-outlined text-[16px]">add</span>
-                  <span>{t("secondary.notes.newNoteBtn")}</span>
-                </button>
+                <div>
+                  <h4 className="font-headline-sm text-headline-sm text-on-surface">
+                    {language === "id" ? "Catatan Proyek" : "Project Notes"}
+                  </h4>
+                  <p className="text-body-sm text-on-surface-variant">
+                    {language === "id"
+                      ? `${projectNotes.length} catatan tersimpan untuk proyek ini`
+                      : `${projectNotes.length} notes saved for this project`}
+                  </p>
+                </div>
+                {!isCreatingNote && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsCreatingNote(true);
+                      setNoteTitle("");
+                      setNoteContent("");
+                      setNoteCategory(project.category || "General");
+                      setNoteError("");
+                    }}
+                    className="px-3 py-1.5 rounded-lg bg-primary text-on-primary font-label-md text-label-md flex items-center gap-1 shadow-sm cursor-pointer hover:bg-primary-container transition-colors"
+                  >
+                    <span className="material-symbols-outlined text-[16px]">add</span>
+                    <span>{t("secondary.notes.newNoteBtn") || "+ New Note"}</span>
+                  </button>
+                )}
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-space-md">
-                {notes.map((n) => (
-                  <div key={n.id} className="p-space-md rounded-xl bg-surface-container-low flex flex-col justify-between">
-                    <div>
-                      <span className="text-[11px] font-semibold text-primary px-2 py-0.5 rounded bg-primary/10 mb-2 inline-block">
-                        {n.category}
-                      </span>
-                      <h5 className="font-headline-sm text-headline-sm text-on-surface font-semibold mb-1">{n.title}</h5>
-                      <p className="font-body-sm text-body-sm text-on-surface-variant line-clamp-3">{n.snippet}</p>
+
+              {/* Note Creation Form */}
+              {isCreatingNote && (
+                <div className="p-space-md sm:p-space-lg rounded-xl bg-surface-container-low border border-primary/30 space-y-space-md animate-in fade-in duration-150">
+                  <div className="flex items-center justify-between border-b border-surface-container pb-2">
+                    <div className="flex items-center gap-2">
+                      <span className="material-symbols-outlined text-primary text-[20px]">edit_note</span>
+                      <h5 className="font-headline-sm text-headline-sm text-on-surface font-semibold">
+                        {language === "id" ? "Buat Catatan Baru" : "Create New Note"}
+                      </h5>
                     </div>
-                    <span className="text-[11px] text-on-surface-variant mt-2 pt-2 border-t border-surface-container block">{n.date}</span>
+                    <button
+                      type="button"
+                      onClick={() => { setIsCreatingNote(false); setNoteError(""); }}
+                      className="w-7 h-7 rounded-lg text-on-surface-variant hover:text-on-surface flex items-center justify-center transition-colors cursor-pointer"
+                    >
+                      <span className="material-symbols-outlined text-[18px]">close</span>
+                    </button>
+                  </div>
+
+                  {noteError && (
+                    <div className="p-2.5 rounded-lg bg-error-container text-on-error-container text-body-sm font-medium flex items-center gap-2">
+                      <span className="material-symbols-outlined text-[18px]">error</span>
+                      <span>{noteError}</span>
+                    </div>
+                  )}
+
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block font-label-md text-label-md text-on-surface mb-1 font-semibold">
+                        {t("createModal.titleLabel") || "Judul Catatan"} <span className="text-error">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={noteTitle}
+                        onChange={(e) => { setNoteTitle(e.target.value); if (noteError) setNoteError(""); }}
+                        placeholder={language === "id" ? "Contoh: Keputusan Arsitektur Database..." : "e.g. Database Architecture Decisions..."}
+                        className="w-full px-3 py-2 rounded-lg bg-surface-container-lowest text-on-surface font-body-md text-body-md border border-surface-container focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                        autoFocus
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block font-label-md text-label-md text-on-surface mb-1 font-semibold">
+                        {t("createModal.categoryLabel") || "Kategori"}
+                      </label>
+                      <select
+                        value={noteCategory}
+                        onChange={(e) => setNoteCategory(e.target.value)}
+                        className="w-full px-3 py-2 rounded-lg bg-surface-container-lowest text-on-surface font-body-md text-body-md border border-surface-container focus:outline-none focus:border-primary cursor-pointer"
+                      >
+                        <option value="Architecture">Architecture</option>
+                        <option value="Technical">Technical</option>
+                        <option value="Sprint">Sprint</option>
+                        <option value="Design">Design</option>
+                        <option value="Documentation">Documentation</option>
+                        <option value="Personal">Personal</option>
+                        <option value="General">General</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block font-label-md text-label-md text-on-surface mb-1 font-semibold">
+                        {language === "id" ? "Isi Catatan" : "Note Content"} <span className="text-error">*</span>
+                      </label>
+                      <textarea
+                        rows={4}
+                        value={noteContent}
+                        onChange={(e) => { setNoteContent(e.target.value); if (noteError) setNoteError(""); }}
+                        placeholder={language === "id" ? "Tulis isi catatan, dokumentasi, atau rangkuman riset..." : "Write note content, documentation, or research findings..."}
+                        className="w-full px-3 py-2 rounded-lg bg-surface-container-lowest text-on-surface font-body-md text-body-md border border-surface-container focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary resize-y"
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-end gap-2 pt-2 border-t border-surface-container">
+                      <button
+                        type="button"
+                        onClick={() => { setIsCreatingNote(false); setNoteError(""); }}
+                        className="px-4 py-2 rounded-lg bg-surface-container-lowest text-on-surface hover:bg-surface-container font-label-md text-label-md transition-colors cursor-pointer"
+                      >
+                        {t("common.cancel") || "Batal"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!noteTitle.trim()) {
+                            setNoteError(language === "id" ? "Judul catatan wajib diisi" : "Note title is required");
+                            return;
+                          }
+                          if (!noteContent.trim()) {
+                            setNoteError(language === "id" ? "Isi catatan wajib diisi" : "Note content is required");
+                            return;
+                          }
+                          addNote({
+                            title: noteTitle.trim(),
+                            snippet: noteContent.trim(),
+                            category: noteCategory,
+                            projectId: project.id,
+                            project: project.title
+                          });
+                          setNoteTitle("");
+                          setNoteContent("");
+                          setIsCreatingNote(false);
+                          setNoteError("");
+                        }}
+                        className="px-4 py-2 rounded-lg bg-primary text-on-primary font-label-md text-label-md font-semibold hover:bg-primary-container transition-colors shadow-sm cursor-pointer"
+                      >
+                        {language === "id" ? "Simpan Catatan" : "Save Note"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Notes Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-space-md">
+                {projectNotes.map((n) => (
+                  <div key={n.id} className="p-space-md rounded-xl bg-surface-container-low flex flex-col justify-between group border border-transparent hover:border-primary/20 transition-all">
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-[11px] font-semibold text-primary px-2 py-0.5 rounded bg-primary/10 inline-block">
+                          {n.category}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (window.confirm(language === "id" ? `Hapus catatan "${n.title}"?` : `Delete note "${n.title}"?`)) {
+                              deleteNote(n.id);
+                            }
+                          }}
+                          className="w-6 h-6 rounded text-on-surface-variant hover:text-error hover:bg-error-container/30 flex items-center justify-center transition-colors cursor-pointer opacity-70 group-hover:opacity-100"
+                          title={t("common.delete")}
+                        >
+                          <span className="material-symbols-outlined text-[15px]">delete</span>
+                        </button>
+                      </div>
+                      <h5 className="font-headline-sm text-headline-sm text-on-surface font-semibold mb-1 group-hover:text-primary transition-colors">
+                        {n.title}
+                      </h5>
+                      <p className="font-body-sm text-body-sm text-on-surface-variant line-clamp-3 whitespace-pre-wrap">
+                        {n.snippet}
+                      </p>
+                    </div>
+                    <span className="text-[11px] text-on-surface-variant mt-3 pt-2 border-t border-surface-container block">
+                      {n.date}
+                    </span>
                   </div>
                 ))}
               </div>
+
+              {projectNotes.length === 0 && !isCreatingNote && (
+                <div className="p-8 text-center bg-surface-container-low rounded-xl text-on-surface-variant flex flex-col items-center">
+                  <span className="material-symbols-outlined text-[40px] text-on-surface-variant/70 mb-2">description</span>
+                  <h5 className="font-headline-sm text-headline-sm text-on-surface font-semibold">
+                    {language === "id" ? "Belum Ada Catatan Proyek" : "No Project Notes Yet"}
+                  </h5>
+                  <p className="font-body-sm text-body-sm text-on-surface-variant mt-1 max-w-sm">
+                    {language === "id"
+                      ? "Belum ada catatan khusus untuk proyek ini. Simpan riset, arsitektur, atau poin penting di sini."
+                      : "No notes specifically for this project yet. Store research, architecture specs, or key decisions here."}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsCreatingNote(true);
+                      setNoteTitle("");
+                      setNoteContent("");
+                      setNoteCategory(project.category || "General");
+                      setNoteError("");
+                    }}
+                    className="mt-4 px-4 py-2 rounded-lg bg-primary text-on-primary font-label-md text-label-md font-semibold hover:bg-primary-container transition-colors cursor-pointer shadow-sm flex items-center gap-1.5"
+                  >
+                    <span className="material-symbols-outlined text-[16px]">add</span>
+                    <span>{language === "id" ? "Buat Catatan Pertama" : "Create First Note"}</span>
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>

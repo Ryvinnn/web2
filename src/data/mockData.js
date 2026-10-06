@@ -116,7 +116,13 @@ export const initialProjects = [
     status: "in-progress",
     statusLabel: "In Progress",
     owner: "Alex",
-    milestones: 5,
+    milestones: [
+      { id: "pm-1-1", title: "HTML & Semantic Architecture Setup", completed: true },
+      { id: "pm-1-2", title: "Tailwind CSS Design System Implementation", completed: true },
+      { id: "pm-1-3", title: "Laravel 11 Backend & Multi-tenant Schema", completed: true },
+      { id: "pm-1-4", title: "Inertia.js Bridge & State Synchronization", completed: true },
+      { id: "pm-1-5", title: "Production Hardening & CI/CD Pipeline", completed: false }
+    ],
     icon: "dns",
     gradient: "from-surface-container via-surface-container-high to-secondary-container"
   },
@@ -135,7 +141,12 @@ export const initialProjects = [
     status: "in-progress",
     statusLabel: "In Progress",
     owner: "Alex",
-    milestones: 4,
+    milestones: [
+      { id: "pm-2-1", title: "Mobile UI Wireframing & Design Tokens", completed: true },
+      { id: "pm-2-2", title: "Geolocation Radar & Geofence Logic", completed: true },
+      { id: "pm-2-3", title: "Shift Calendar & Check-in API Integration", completed: true },
+      { id: "pm-2-4", title: "Offline Sync & Background Push Alerts", completed: false }
+    ],
     icon: "smartphone",
     gradient: "from-surface-container-low via-surface-container to-surface-dim"
   },
@@ -154,7 +165,11 @@ export const initialProjects = [
     status: "in-progress",
     statusLabel: "In Progress",
     owner: "Alex",
-    milestones: 3,
+    milestones: [
+      { id: "pm-3-1", title: "Portfolio Wireframes & Aesthetic Direction", completed: true },
+      { id: "pm-3-2", title: "Interactive 3D Cards & Micro-animations", completed: true },
+      { id: "pm-3-3", title: "Case Studies Writing & Lighthouse 95+ Audit", completed: false }
+    ],
     icon: "palette",
     gradient: "from-surface-container-highest via-surface-container to-surface-container-low"
   },
@@ -173,7 +188,10 @@ export const initialProjects = [
     status: "planning",
     statusLabel: "Planning",
     owner: "Alex",
-    milestones: 2,
+    milestones: [
+      { id: "pm-4-1", title: "Anki Connect Integration Architecture", completed: false },
+      { id: "pm-4-2", title: "Kanji Stroke Order Interactive Engine", completed: false }
+    ],
     icon: "translate",
     gradient: "from-surface-container-high via-surface-container to-surface-container-low"
   },
@@ -192,7 +210,11 @@ export const initialProjects = [
     status: "completed",
     statusLabel: "Completed",
     owner: "Alex",
-    milestones: 3,
+    milestones: [
+      { id: "pm-5-1", title: "Garmin API Telemetry Pipeline", completed: true },
+      { id: "pm-5-2", title: "Heart-rate Zones Matrix Calibration", completed: true },
+      { id: "pm-5-3", title: "10K Running Prep Assessment", completed: true }
+    ],
     icon: "directions_run",
     gradient: "from-surface-container-low via-surface-container to-secondary-container/40"
   },
@@ -211,7 +233,11 @@ export const initialProjects = [
     status: "in-progress",
     statusLabel: "In Progress",
     owner: "Alex",
-    milestones: 3,
+    milestones: [
+      { id: "pm-6-1", title: "LangChain RAG Pipeline Setup", completed: true },
+      { id: "pm-6-2", title: "pgvector Hybrid Semantic Retrieval", completed: false },
+      { id: "pm-6-3", title: "Local Markdown Vault Automated Ingestion", completed: false }
+    ],
     icon: "psychology",
     gradient: "from-secondary-container via-surface-container to-surface-container-low"
   }
@@ -482,6 +508,8 @@ export const initialActivityFeed = [];
 export const initialNotes = [
   {
     id: "n-1",
+    projectId: "p1",
+    project: "Suru Personal Management SaaS",
     title: "Riset Arsitektur Multi-tenant Laravel",
     category: "Architecture",
     date: "Sep 22, 2026",
@@ -489,6 +517,8 @@ export const initialNotes = [
   },
   {
     id: "n-2",
+    projectId: "p3",
+    project: "Personal Portfolio Website",
     title: "Checklist Launching Portfolio v2",
     category: "Personal",
     date: "Sep 20, 2026",
@@ -496,6 +526,8 @@ export const initialNotes = [
   },
   {
     id: "n-3",
+    projectId: "p4",
+    project: "Japanese JLPT Study Dashboard",
     title: "Catatan Kosakata JLPT N3 - Batch 14",
     category: "Language",
     date: "Sep 18, 2026",

@@ -199,7 +199,7 @@ function loadCollection(baseKey, currentUser) {
       setNotes(loadCollection("ignos_notes", user));
       setActivityFeed(loadCollection("ignos_activity_feed", user));
     }
-  }, [user?.email]);
+  }, [user?.email, user]);
 
   // Dynamic "Perlu Perhatian" / "Needs Attention" synchronized with live Projects, Goals, Tasks, and Subtasks
   const needsAttention = useMemo(() => {
@@ -313,28 +313,62 @@ function loadCollection(baseKey, currentUser) {
     }
   }, [activityFeed, user]);
 
+  function recalculateProjectMetrics(project, projectTasks) {
+    const milestones = Array.isArray(project.milestones) ? project.milestones : [];
+    const totalMilestones = milestones.length;
+    const completedMilestones = milestones.filter((m) => m.completed).length;
+
+    const totalTasks = projectTasks.length > 0 ? projectTasks.length : (Number(project.totalTasks) || 0);
+    const completedTasks = projectTasks.length > 0
+      ? projectTasks.filter((t) => t.completed).length
+      : (Number(project.completedTasks) || 0);
+
+    let progress = Number(project.progress) || 0;
+    if (totalMilestones > 0 && totalTasks > 0) {
+      progress = Math.round(((completedTasks + completedMilestones) / (totalTasks + totalMilestones)) * 100);
+    } else if (totalMilestones > 0) {
+      progress = Math.round((completedMilestones / totalMilestones) * 100);
+    } else if (totalTasks > 0) {
+      progress = Math.round((completedTasks / totalTasks) * 100);
+    }
+
+    let status = project.status || "in-progress";
+    if (progress === 100) {
+      status = "completed";
+    } else if (status === "completed" && progress < 100) {
+      status = "in-progress";
+    }
+
+    return {
+      ...project,
+      totalTasks,
+      completedTasks,
+      progress,
+      status,
+      statusLabel: status === "completed" ? "Completed" : (status === "planning" ? "Planning" : "In Progress")
+    };
+  }
+
   // Task actions
   const toggleTask = (taskId) => {
     let affectedProjectId = null;
-    let willBeCompleted = false;
     const todayISO = formatLocalDateToISO(currentDate);
 
-    setTasks((prev) =>
-      prev.map((t) => {
-        if (t.id === taskId) {
-          const nextCompleted = !t.completed;
-          willBeCompleted = nextCompleted;
-          affectedProjectId = t.projectId || t.project;
-          return {
-            ...t,
-            completed: nextCompleted,
-            completedAt: nextCompleted ? (t.completedAt || todayISO) : null,
-            timeTag: nextCompleted ? (language === "id" ? "Baru Selesai" : "Completed Just Now") : t.timeTag
-          };
-        }
-        return t;
-      })
-    );
+    const nextTasks = tasks.map((t) => {
+      if (t.id === taskId) {
+        const nextCompleted = !t.completed;
+        affectedProjectId = t.projectId || t.project;
+        return {
+          ...t,
+          completed: nextCompleted,
+          completedAt: nextCompleted ? (t.completedAt || todayISO) : null,
+          timeTag: nextCompleted ? (language === "id" ? "Baru Selesai" : "Completed Just Now") : t.timeTag
+        };
+      }
+      return t;
+    });
+
+    setTasks(nextTasks);
 
     if (affectedProjectId) {
       setProjects((prev) =>
@@ -345,16 +379,10 @@ function loadCollection(baseKey, currentUser) {
             p.title === affectedProjectId ||
             (p.title && affectedProjectId && p.title.toLowerCase().includes(String(affectedProjectId).toLowerCase()))
           ) {
-            const nextCompletedTasks = willBeCompleted
-              ? Math.min(p.totalTasks, (p.completedTasks || 0) + 1)
-              : Math.max(0, (p.completedTasks || 0) - 1);
-            const nextProgress = p.totalTasks > 0 ? Math.round((nextCompletedTasks / p.totalTasks) * 100) : p.progress;
-            return {
-              ...p,
-              completedTasks: nextCompletedTasks,
-              progress: nextProgress,
-              status: nextProgress === 100 ? "completed" : (nextProgress > 0 ? "in-progress" : p.status)
-            };
+            const pTasks = nextTasks.filter(
+              (t) => t.projectId === p.id || (p.key && t.projectId === p.key) || t.project === p.title
+            );
+            return recalculateProjectMetrics(p, pTasks);
           }
           return p;
         })
@@ -452,7 +480,29 @@ function loadCollection(baseKey, currentUser) {
         }
       ]
     };
-    setTasks((prev) => [item, ...prev]);
+    const nextTasks = [item, ...tasks];
+    setTasks(nextTasks);
+
+    // Synchronize affected project
+    const matchedProjectId = item.projectId || item.project;
+    if (matchedProjectId) {
+      setProjects((prev) =>
+        prev.map((p) => {
+          if (
+            p.id === matchedProjectId ||
+            p.key === matchedProjectId ||
+            p.title === matchedProjectId ||
+            (p.title && matchedProjectId && p.title.toLowerCase().includes(String(matchedProjectId).toLowerCase()))
+          ) {
+            const pTasks = nextTasks.filter(
+              (t) => t.projectId === p.id || (p.key && t.projectId === p.key) || t.project === p.title
+            );
+            return recalculateProjectMetrics(p, pTasks);
+          }
+          return p;
+        })
+      );
+    }
 
     // Add activity
     setActivityFeed((prev) => [
@@ -495,27 +545,71 @@ function loadCollection(baseKey, currentUser) {
         prev.filter((a) => !(a.typeKey === "taskCompleted" && a.itemTitle === targetTask.title))
       );
     }
-    setTasks((prev) =>
-      prev.map((t) => {
-        if (t.id === taskId) {
-          const merged = { ...t, ...updates };
-          if (updates.completed !== undefined) {
-            merged.completedAt = updates.completed ? (updates.completedAt || t.completedAt || todayISO) : null;
-          }
-          return merged;
+    const nextTasks = tasks.map((t) => {
+      if (t.id === taskId) {
+        const merged = { ...t, ...updates };
+        if (updates.completed !== undefined) {
+          merged.completedAt = updates.completed ? (updates.completedAt || t.completedAt || todayISO) : null;
         }
-        return t;
-      })
-    );
+        return merged;
+      }
+      return t;
+    });
+    setTasks(nextTasks);
+
+    const affectedProjectId = targetTask?.projectId || targetTask?.project;
+    if (affectedProjectId) {
+      setProjects((prev) =>
+        prev.map((p) => {
+          if (
+            p.id === affectedProjectId ||
+            p.key === affectedProjectId ||
+            p.title === affectedProjectId ||
+            (p.title && affectedProjectId && p.title.toLowerCase().includes(String(affectedProjectId).toLowerCase()))
+          ) {
+            const pTasks = nextTasks.filter(
+              (t) => t.projectId === p.id || (p.key && t.projectId === p.key) || t.project === p.title
+            );
+            return recalculateProjectMetrics(p, pTasks);
+          }
+          return p;
+        })
+      );
+    }
+
     showToast(language === "id" ? "✓ Tugas berhasil diperbarui!" : "✓ Task updated successfully!");
   };
 
   const deleteTask = (taskId) => {
     const target = tasks.find((t) => t.id === taskId);
-    setTasks((prev) => prev.filter((t) => t.id !== taskId));
+    const nextTasks = tasks.filter((t) => t.id !== taskId);
+    setTasks(nextTasks);
     if (selectedTaskId === taskId) {
       setSelectedTaskId(null);
     }
+
+    if (target) {
+      const affectedProjectId = target.projectId || target.project;
+      if (affectedProjectId) {
+        setProjects((prev) =>
+          prev.map((p) => {
+            if (
+              p.id === affectedProjectId ||
+              p.key === affectedProjectId ||
+              p.title === affectedProjectId ||
+              (p.title && affectedProjectId && p.title.toLowerCase().includes(String(affectedProjectId).toLowerCase()))
+            ) {
+              const pTasks = nextTasks.filter(
+                (t) => t.projectId === p.id || (p.key && t.projectId === p.key) || t.project === p.title
+              );
+              return recalculateProjectMetrics(p, pTasks);
+            }
+            return p;
+          })
+        );
+      }
+    }
+
     if (target?.title) {
       setActivityFeed((prev) => prev.filter((a) => a.itemTitle !== target.title));
     }
@@ -790,26 +884,46 @@ function loadCollection(baseKey, currentUser) {
 
   // Project actions
   const addProject = (newProject) => {
+    const milestones = Array.isArray(newProject.milestones) ? newProject.milestones : [];
+    const totalMilestones = milestones.length;
+    const completedMilestones = milestones.filter((m) => m.completed).length;
+    const totalTasks = Number(newProject.totalTasks) || 0;
+    const completedTasks = Number(newProject.completedTasks) || 0;
+
+    let progress = 0;
+    if (totalMilestones > 0 && totalTasks > 0) {
+      progress = Math.round(((completedTasks + completedMilestones) / (totalTasks + totalMilestones)) * 100);
+    } else if (totalMilestones > 0) {
+      progress = Math.round((completedMilestones / totalMilestones) * 100);
+    } else if (totalTasks > 0) {
+      progress = Math.round((completedTasks / totalTasks) * 100);
+    } else {
+      progress = Number(newProject.progress) || 0;
+    }
+
+    const status = newProject.status || (progress === 100 ? "completed" : "in-progress");
+
     const item = {
       id: "p-" + Date.now(),
-      key: newProject.title.toLowerCase().replace(/[^a-z0-9]/g, "-"),
+      key: newProject.key || newProject.title.toLowerCase().replace(/[^a-z0-9]/g, "-"),
       title: newProject.title,
       description: newProject.description || "",
       category: newProject.category || "Web Engineering",
       linkedGoal: newProject.linkedGoal || "",
       techStack: newProject.techStack || [],
-      progress: 0,
-      completedTasks: 0,
-      totalTasks: newProject.totalTasks || 0,
+      progress,
+      completedTasks,
+      totalTasks,
       deadline: newProject.deadline || formatLocalDateLong(currentDate, language),
-      status: newProject.status || "in-progress",
-      statusLabel: "In Progress",
+      status,
+      statusLabel: status === "completed" ? "Completed" : (status === "planning" ? "Planning" : "In Progress"),
       owner: user?.name || "Admin",
-      milestones: newProject.milestones || 0,
+      milestones,
       icon: newProject.icon || "hub",
-      gradient: "from-surface-container via-surface-container-high to-secondary-container",
+      gradient: newProject.gradient || "from-surface-container via-surface-container-high to-secondary-container",
       coverImage: newProject.coverImage || null,
-      coverImagePosition: newProject.coverImagePosition ?? 50
+      coverImagePosition: newProject.coverImagePosition ?? 50,
+      userId: user?.email || "default"
     };
     setProjects((prev) => [item, ...prev]);
 
@@ -828,11 +942,21 @@ function loadCollection(baseKey, currentUser) {
     ]);
 
     showToast(language === "id" ? `✓ Proyek "${newProject.title}" berhasil dibuat!` : `✓ Project "${newProject.title}" created successfully!`);
+    return item;
   };
 
   const updateProject = (projectId, updates) => {
     setProjects((prev) =>
-      prev.map((p) => (p.id === projectId || p.key === projectId ? { ...p, ...updates } : p))
+      prev.map((p) => {
+        if (p.id === projectId || p.key === projectId) {
+          const merged = { ...p, ...updates };
+          const pTasks = tasks.filter(
+            (t) => t.projectId === p.id || (p.key && t.projectId === p.key) || t.project === p.title
+          );
+          return recalculateProjectMetrics(merged, pTasks);
+        }
+        return p;
+      })
     );
     showToast(language === "id" ? "✓ Proyek berhasil diperbarui!" : "✓ Project updated successfully!");
   };
@@ -840,10 +964,190 @@ function loadCollection(baseKey, currentUser) {
   const deleteProject = (projectId) => {
     const target = projects.find((p) => p.id === projectId || p.key === projectId);
     setProjects((prev) => prev.filter((p) => p.id !== projectId && p.key !== projectId));
+    // Remove notes associated with this project so data stays clean
+    setNotes((prev) => prev.filter((n) => n.projectId !== projectId && (target?.key ? n.projectId !== target.key : true)));
+    if (projectModalState.isOpen && (projectModalState.projectKey === projectId || projectModalState.projectKey === target?.key)) {
+      setProjectModalState({ isOpen: false, projectKey: "ignos" });
+    }
     if (target?.title) {
       setActivityFeed((prev) => prev.filter((a) => a.itemTitle !== target.title));
     }
     showToast(language === "id" ? `✓ Proyek "${target?.title || ''}" telah dihapus` : `✓ Project "${target?.title || ''}" deleted`, "info");
+  };
+
+  const toggleProjectMilestone = (projectId, milestoneId) => {
+    let affectedMilestoneTitle = "";
+    let willBeCompleted = false;
+    const todayISO = formatLocalDateToISO(currentDate);
+
+    setProjects((prev) =>
+      prev.map((p) => {
+        if (p.id === projectId || p.key === projectId) {
+          const currentMilestones = Array.isArray(p.milestones) ? p.milestones : [];
+          const updatedMilestones = currentMilestones.map((m) => {
+            if (m.id === milestoneId) {
+              willBeCompleted = !m.completed;
+              affectedMilestoneTitle = m.title;
+              return {
+                ...m,
+                completed: willBeCompleted,
+                completedAt: willBeCompleted ? todayISO : null
+              };
+            }
+            return m;
+          });
+
+          const pTasks = tasks.filter(
+            (t) => t.projectId === p.id || (p.key && t.projectId === p.key) || t.project === p.title
+          );
+          const totalTasks = pTasks.length > 0 ? pTasks.length : (Number(p.totalTasks) || 0);
+          const completedTasks = pTasks.length > 0
+            ? pTasks.filter((t) => t.completed).length
+            : (Number(p.completedTasks) || 0);
+
+          const totalMilestones = updatedMilestones.length;
+          const completedMilestones = updatedMilestones.filter((m) => m.completed).length;
+
+          let newProgress = p.progress || 0;
+          if (totalMilestones > 0 && totalTasks > 0) {
+            newProgress = Math.round(((completedTasks + completedMilestones) / (totalTasks + totalMilestones)) * 100);
+          } else if (totalMilestones > 0) {
+            newProgress = Math.round((completedMilestones / totalMilestones) * 100);
+          } else if (totalTasks > 0) {
+            newProgress = Math.round((completedTasks / totalTasks) * 100);
+          }
+
+          const newStatus = newProgress === 100
+            ? "completed"
+            : (p.status === "completed" && newProgress < 100 ? "in-progress" : (newProgress > 0 && p.status === "planning" ? "in-progress" : p.status));
+
+          return {
+            ...p,
+            milestones: updatedMilestones,
+            progress: newProgress,
+            status: newStatus,
+            statusLabel: newStatus === "completed" ? "Completed" : (newStatus === "planning" ? "Planning" : "In Progress")
+          };
+        }
+        return p;
+      })
+    );
+
+    if (affectedMilestoneTitle) {
+      if (willBeCompleted) {
+        setActivityFeed((prev) => [
+          {
+            id: "act-" + Date.now(),
+            typeKey: "projectMilestoneCompleted",
+            itemTitle: affectedMilestoneTitle,
+            type: language === "id" ? "Milestone Proyek Selesai" : "Project Milestone Completed",
+            description: language === "id"
+              ? `Menyelesaikan milestone: "${affectedMilestoneTitle}"`
+              : `Completed milestone: "${affectedMilestoneTitle}"`,
+            time: language === "id" ? "Baru saja" : "Just now",
+            date: todayISO,
+            color: "bg-tertiary"
+          },
+          ...prev
+        ]);
+        showToast(language === "id" ? `✓ Milestone "${affectedMilestoneTitle}" selesai!` : `✓ Milestone "${affectedMilestoneTitle}" completed!`);
+      } else {
+        setActivityFeed((prev) =>
+          prev.filter((a) => !(a.typeKey === "projectMilestoneCompleted" && a.itemTitle === affectedMilestoneTitle))
+        );
+        showToast(language === "id" ? `Milestone "${affectedMilestoneTitle}" ditandai belum selesai` : `Milestone "${affectedMilestoneTitle}" marked incomplete`, "info");
+      }
+    }
+  };
+
+  const addProjectMilestone = (projectId, title) => {
+    if (!title || !title.trim()) return;
+    const newM = {
+      id: "pm-" + Date.now(),
+      title: title.trim(),
+      completed: false
+    };
+
+    setProjects((prev) =>
+      prev.map((p) => {
+        if (p.id === projectId || p.key === projectId) {
+          const currentMilestones = Array.isArray(p.milestones) ? p.milestones : [];
+          const updatedMilestones = [...currentMilestones, newM];
+
+          const pTasks = tasks.filter(
+            (t) => t.projectId === p.id || (p.key && t.projectId === p.key) || t.project === p.title
+          );
+          const totalTasks = pTasks.length > 0 ? pTasks.length : (Number(p.totalTasks) || 0);
+          const completedTasks = pTasks.length > 0
+            ? pTasks.filter((t) => t.completed).length
+            : (Number(p.completedTasks) || 0);
+
+          const totalMilestones = updatedMilestones.length;
+          const completedMilestones = updatedMilestones.filter((m) => m.completed).length;
+
+          let newProgress = p.progress || 0;
+          if (totalMilestones > 0 && totalTasks > 0) {
+            newProgress = Math.round(((completedTasks + completedMilestones) / (totalTasks + totalMilestones)) * 100);
+          } else if (totalMilestones > 0) {
+            newProgress = Math.round((completedMilestones / totalMilestones) * 100);
+          } else if (totalTasks > 0) {
+            newProgress = Math.round((completedTasks / totalTasks) * 100);
+          }
+
+          return {
+            ...p,
+            milestones: updatedMilestones,
+            progress: newProgress,
+            status: newProgress === 100 ? "completed" : (p.status === "completed" ? "in-progress" : p.status)
+          };
+        }
+        return p;
+      })
+    );
+    showToast(language === "id" ? `✓ Milestone "${title.trim()}" ditambahkan!` : `✓ Milestone "${title.trim()}" added!`);
+  };
+
+  const deleteProjectMilestone = (projectId, milestoneId) => {
+    let deletedTitle = "";
+    setProjects((prev) =>
+      prev.map((p) => {
+        if (p.id === projectId || p.key === projectId) {
+          const currentMilestones = Array.isArray(p.milestones) ? p.milestones : [];
+          const target = currentMilestones.find((m) => m.id === milestoneId);
+          if (target) deletedTitle = target.title;
+          const updatedMilestones = currentMilestones.filter((m) => m.id !== milestoneId);
+
+          const pTasks = tasks.filter(
+            (t) => t.projectId === p.id || (p.key && t.projectId === p.key) || t.project === p.title
+          );
+          const totalTasks = pTasks.length > 0 ? pTasks.length : (Number(p.totalTasks) || 0);
+          const completedTasks = pTasks.length > 0
+            ? pTasks.filter((t) => t.completed).length
+            : (Number(p.completedTasks) || 0);
+
+          const totalMilestones = updatedMilestones.length;
+          const completedMilestones = updatedMilestones.filter((m) => m.completed).length;
+
+          let newProgress = 0;
+          if (totalMilestones > 0 && totalTasks > 0) {
+            newProgress = Math.round(((completedTasks + completedMilestones) / (totalTasks + totalMilestones)) * 100);
+          } else if (totalMilestones > 0) {
+            newProgress = Math.round((completedMilestones / totalMilestones) * 100);
+          } else if (totalTasks > 0) {
+            newProgress = Math.round((completedTasks / totalTasks) * 100);
+          }
+
+          return {
+            ...p,
+            milestones: updatedMilestones,
+            progress: newProgress,
+            status: newProgress === 100 ? "completed" : (p.status === "completed" && newProgress < 100 ? "in-progress" : p.status)
+          };
+        }
+        return p;
+      })
+    );
+    showToast(language === "id" ? `✓ Milestone "${deletedTitle || ''}" dihapus` : `✓ Milestone "${deletedTitle || ''}" deleted`, "info");
   };
 
   // Note actions
@@ -852,6 +1156,9 @@ function loadCollection(baseKey, currentUser) {
       id: "n-" + Date.now(),
       title: newNote.title,
       category: newNote.category || "General",
+      projectId: newNote.projectId || "",
+      project: newNote.project || "",
+      userId: user?.email || "default",
       date: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
       snippet: newNote.snippet || newNote.description || ""
     };
@@ -967,6 +1274,9 @@ function loadCollection(baseKey, currentUser) {
     addProject,
     updateProject,
     deleteProject,
+    toggleProjectMilestone,
+    addProjectMilestone,
+    deleteProjectMilestone,
     addNote,
     updateNote,
     deleteNote,

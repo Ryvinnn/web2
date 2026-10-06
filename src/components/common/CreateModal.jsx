@@ -247,6 +247,15 @@ export default function CreateModal() {
         ? deadlineDate.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
         : (deadline || "Nov 2026");
 
+      const validMilestones = milestonesList
+        .filter((m) => m.title && m.title.trim())
+        .map((m, idx) => ({
+          id: m.id ? String(m.id) : "pm-" + Date.now() + "-" + idx,
+          title: m.title.trim(),
+          completed: !!m.completed,
+          completedAt: m.completed ? formatLocalDateToISO(new Date()) : null
+        }));
+
       const projectPayload = {
         title: title.trim(),
         description: description.trim(),
@@ -254,7 +263,8 @@ export default function CreateModal() {
         deadline: deadlineFormatted,
         priority,
         coverImage: coverImage.trim() ? coverImage : null,
-        coverImagePosition: coverImage.trim() ? coverImagePosition : 50
+        coverImagePosition: coverImage.trim() ? coverImagePosition : 50,
+        milestones: validMilestones
       };
 
       if (isEditing) {
@@ -266,7 +276,9 @@ export default function CreateModal() {
       const notePayload = {
         title: title.trim(),
         category,
-        snippet: description.trim()
+        snippet: description.trim(),
+        projectId: initialData?.projectId || "",
+        project: initialData?.project || initialData?.projectTitle || ""
       };
 
       if (isEditing) {
@@ -298,7 +310,7 @@ export default function CreateModal() {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-inverse-surface/40 backdrop-blur-sm p-2.5 sm:p-4 transition-opacity animate-in fade-in duration-150"
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-inverse-surface/40 backdrop-blur-sm p-2.5 sm:p-4 transition-opacity animate-in fade-in duration-150"
       onClick={(e) => {
         if (e.target === e.currentTarget) closeModal();
       }}
@@ -613,24 +625,36 @@ export default function CreateModal() {
             </div>
           )}
 
-          {/* If type is goal, provide Milestone Checklist Builder */}
-          {type === "goal" && (
+          {/* Milestone Checklist Builder for Goal and Project */}
+          {(type === "goal" || type === "project") && (
             <div className="flex flex-col gap-space-sm pt-space-xs border-t border-surface-container">
               <div className="flex items-center justify-between">
-                <label className="text-label-md font-label-md font-semibold text-on-surface">
-                  {t("goals.milestoneChecklist")}
-                </label>
+                <div>
+                  <label className="text-label-md font-label-md font-semibold text-on-surface block">
+                    {type === "project" ? (language === "id" ? "Milestone Proyek" : "Project Milestones") : t("goals.milestoneChecklist")}
+                  </label>
+                  {type === "project" && (
+                    <span className="text-body-sm text-on-surface-variant text-[12px]">
+                      {language === "id" ? "Tambahkan sasaran bertahap atau deliverable (opsional)" : "Add staged milestones or deliverables (optional)"}
+                    </span>
+                  )}
+                </div>
                 <button
                   type="button"
                   onClick={handleAddMilestoneRow}
-                  className="text-primary hover:text-primary-container text-label-sm font-label-sm font-semibold inline-flex items-center gap-1"
+                  className="text-primary hover:text-primary-container text-label-sm font-label-sm font-semibold inline-flex items-center gap-1 cursor-pointer"
                 >
-                  <span className="material-symbols-outlined text-[16px]">add</span> {t("goals.addMilestoneRow")}
+                  <span className="material-symbols-outlined text-[16px]">add</span> {type === "project" ? (language === "id" ? "Tambah Milestone" : "Add Milestone") : t("goals.addMilestoneRow")}
                 </button>
               </div>
               <div className="flex flex-col gap-space-xs">
-                {milestonesList.map((m) => (
+                {milestonesList.map((m, idx) => (
                   <div key={m.id} className="flex items-center gap-space-xs">
+                    {type === "project" && (
+                      <span className="text-on-surface-variant font-label-sm text-label-sm font-mono w-7 text-center font-bold">
+                        M{idx + 1}
+                      </span>
+                    )}
                     <input
                       type="checkbox"
                       checked={m.completed}
@@ -641,24 +665,30 @@ export default function CreateModal() {
                           )
                         )
                       }
-                      className="w-4 h-4 rounded text-primary focus:ring-primary accent-primary"
+                      className="w-4 h-4 rounded text-primary focus:ring-primary accent-primary cursor-pointer"
                     />
                     <input
                       type="text"
                       value={m.title}
                       onChange={(e) => handleMilestoneTextChange(m.id, e.target.value)}
-                      placeholder={t("goals.milestonePlaceholder")}
+                      placeholder={type === "project" ? (language === "id" ? `Contoh: Fase ${idx + 1} - Arsitektur & Database...` : `e.g. Phase ${idx + 1} - Architecture & Database...`) : t("goals.milestonePlaceholder")}
                       className="flex-1 px-3 py-1.5 rounded-lg bg-surface-container-low text-on-surface font-body-sm text-body-sm focus:outline-none focus:ring-1 focus:ring-primary"
                     />
                     <button
                       type="button"
                       onClick={() => handleRemoveMilestoneRow(m.id)}
-                      className="w-7 h-7 text-on-surface-variant hover:text-error flex items-center justify-center transition-colors"
+                      className="w-7 h-7 text-on-surface-variant hover:text-error flex items-center justify-center transition-colors cursor-pointer"
+                      title={t("common.delete")}
                     >
                       <span className="material-symbols-outlined text-[16px]">delete</span>
                     </button>
                   </div>
                 ))}
+                {milestonesList.length === 0 && type === "project" && (
+                  <div className="text-center py-2.5 text-on-surface-variant text-body-sm border border-dashed border-surface-container rounded-lg">
+                    {language === "id" ? "Belum ada milestone. Klik '+ Tambah Milestone' untuk menambahkan." : "No milestones added yet. Click '+ Add Milestone' to add."}
+                  </div>
+                )}
               </div>
             </div>
           )}
