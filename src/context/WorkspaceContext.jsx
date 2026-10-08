@@ -906,6 +906,7 @@ function loadCollection(baseKey, currentUser) {
     const item = {
       id: "p-" + Date.now(),
       key: newProject.key || newProject.title.toLowerCase().replace(/[^a-z0-9]/g, "-"),
+      code: newProject.code || `PRJ-${String(projects.length + 1).padStart(2, "0")}`,
       title: newProject.title,
       description: newProject.description || "",
       category: newProject.category || "Web Engineering",
@@ -923,7 +924,8 @@ function loadCollection(baseKey, currentUser) {
       gradient: newProject.gradient || "from-surface-container via-surface-container-high to-secondary-container",
       coverImage: newProject.coverImage || null,
       coverImagePosition: newProject.coverImagePosition ?? 50,
-      userId: user?.email || "default"
+      userId: user?.email || "default",
+      createdAt: newProject.createdAt || formatLocalDateToISO(currentDate)
     };
     setProjects((prev) => [item, ...prev]);
 

@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useWorkspace } from "../context/WorkspaceContext";
-import { getCalendarDayDiff } from "../utils/attention";
+import { getCalendarDayDiff, parseAnyDate } from "../utils/attention";
 
 export default function ProjectsPage() {
   const navigate = useNavigate();
@@ -10,9 +10,23 @@ export default function ProjectsPage() {
   const [statusFilter, setStatusFilter] = useState("all"); // 'all' | 'in-progress' | 'planning' | 'completed'
   const [viewMode, setViewMode] = useState("grid"); // 'grid' | 'kanban' | 'list'
 
-  const inProgressCount = useMemo(() => projects.filter((p) => p.status === "in-progress").length, [projects]);
+  const inProgressCount = useMemo(
+    () => projects.filter((p) => p.status === "in-progress" || p.status === "in_progress").length,
+    [projects]
+  );
   const planningCount = useMemo(() => projects.filter((p) => p.status === "planning").length, [projects]);
   const completedCount = useMemo(() => projects.filter((p) => p.status === "completed").length, [projects]);
+
+  // Dynamic projects added/active this month based on real project creation data
+  const projectsThisMonth = useMemo(() => {
+    const now = currentDate instanceof Date ? currentDate : new Date();
+    const curYear = now.getFullYear();
+    const curMonth = now.getMonth();
+    return projects.filter((p) => {
+      const d = parseAnyDate(p.createdAt) || (p.createdAt ? new Date(p.createdAt) : null);
+      return d && d.getFullYear() === curYear && d.getMonth() === curMonth;
+    }).length;
+  }, [projects, currentDate]);
 
   // Dynamic task rollup across user's actual projects
   const { totalTasks, completedTasks, taskPercent } = useMemo(() => {
@@ -39,7 +53,7 @@ export default function ProjectsPage() {
     const count = projects.filter((p) => {
       if (p.status === "completed" || !p.deadline) return false;
       const diff = getCalendarDayDiff(p.deadline, currentDate);
-      return diff !== null && diff <= 14;
+      return diff !== null && diff >= 0 && diff <= 14;
     }).length;
     const percent = projects.length > 0 ? Math.min(100, Math.round((count / projects.length) * 100)) : 0;
     return { upcomingDeadlinesCount: count, upcomingDeadlinesPercent: percent };
@@ -60,6 +74,30 @@ export default function ProjectsPage() {
     const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
     return { totalMilestones: total, completedMilestones: completed, milestonesPercent: percent };
   }, [projects]);
+
+  // Dynamic workspace context label derived from current user's profile and projects
+  const workspaceContextLabel = useMemo(() => {
+    const baseName = user?.name
+      ? (language === "id" ? `Ruang Kerja ${user.name}` : `${user.name}'s Workspace`)
+      : (language === "id" ? "Ruang Kerja Pribadi" : "Personal Workspace");
+    if (projects.length === 0) {
+      return baseName;
+    }
+    return `${baseName} • ${projects.length} ${language === "id" ? "Proyek" : (projects.length === 1 ? "Project" : "Projects")}`;
+  }, [user, language, projects.length]);
+
+  const currentQuarter = useMemo(() => {
+    const now = currentDate instanceof Date ? currentDate : new Date();
+    return Math.floor(now.getMonth() / 3) + 1;
+  }, [currentDate]);
+
+  const totalAllMilestones = useMemo(() => {
+    let count = totalMilestones;
+    (goals || []).forEach((g) => {
+      if (Array.isArray(g.milestones)) count += g.milestones.length;
+    });
+    return count;
+  }, [totalMilestones, goals]);
 
   const sprintDays = useMemo(() => {
     const now = currentDate instanceof Date ? currentDate : new Date();
@@ -148,6 +186,9 @@ export default function ProjectsPage() {
 
   const filteredProjects = useMemo(() => {
     if (statusFilter === "all") return projects;
+    if (statusFilter === "in-progress") {
+      return projects.filter((p) => p.status === "in-progress" || p.status === "in_progress");
+    }
     return projects.filter((p) => p.status === statusFilter);
   }, [projects, statusFilter]);
 
@@ -168,7 +209,7 @@ export default function ProjectsPage() {
               {t("projects.tag")}
             </span>
             <span className="w-1.5 h-1.5 rounded-full bg-outline-variant"></span>
-            <span className="font-label-sm text-label-sm text-on-surface-variant">{t("projects.subtag")}</span>
+            <span className="font-label-sm text-label-sm text-on-surface-variant">{workspaceContextLabel}</span>
           </div>
           <h1 className="font-display text-display text-on-surface tracking-tight">{t("projects.title")}</h1>
           <p className="font-body-md text-body-md text-on-surface-variant max-w-2xl mt-0.5">
@@ -207,9 +248,19 @@ export default function ProjectsPage() {
           </div>
           <div className="flex items-baseline gap-space-sm">
             <span className="font-display text-display text-on-surface">{inProgressCount}</span>
-            <span className="font-label-sm text-label-sm text-tertiary font-semibold flex items-center">
-              <span className="material-symbols-outlined text-[14px]">trending_up</span> {t("projects.monthInc")}
-            </span>
+            {projects.length === 0 ? (
+              <span className="font-label-sm text-label-sm text-on-surface-variant font-medium flex items-center">
+                {t("projects.monthIncZero")}
+              </span>
+            ) : projectsThisMonth > 0 ? (
+              <span className="font-label-sm text-label-sm text-tertiary font-semibold flex items-center">
+                <span className="material-symbols-outlined text-[14px]">trending_up</span> {t("projects.monthInc", { count: projectsThisMonth })}
+              </span>
+            ) : (
+              <span className="font-label-sm text-label-sm text-on-surface-variant font-medium flex items-center">
+                {t("projects.monthIncZero")}
+              </span>
+            )}
           </div>
           <div className="w-full bg-surface-container-low h-1.5 rounded-full mt-3 overflow-hidden">
             <div className="bg-primary h-full rounded-full transition-all duration-500" style={{ width: `${projects.length > 0 ? (inProgressCount / projects.length) * 100 : 0}%` }}></div>
@@ -225,28 +276,36 @@ export default function ProjectsPage() {
           </div>
           <div className="flex items-baseline gap-space-sm">
             <span className="font-display text-display text-on-surface">
-              {completedTasks}<span className="font-headline-md text-headline-md text-on-surface-variant font-normal">/{totalTasks}</span>
+              {completedTasks}<span className="font-headline-md text-headline-md text-on-surface-variant font-normal"> / {totalTasks}</span>
             </span>
-            <span className="font-label-sm text-label-sm text-on-surface-variant">{taskPercent}% {t("projects.totalTasks")}</span>
+            {totalTasks > 0 ? (
+              <span className="font-label-sm text-label-sm text-on-surface-variant">{taskPercent}% {t("projects.totalTasks")}</span>
+            ) : (
+              <span className="font-label-sm text-label-sm text-on-surface-variant font-medium">{t("projects.noTasksYet")}</span>
+            )}
           </div>
           <div className="w-full bg-surface-container-low h-1.5 rounded-full mt-3 overflow-hidden">
-            <div className="bg-primary-container h-full rounded-full transition-all duration-500" style={{ width: `${taskPercent}%` }}></div>
+            <div className="bg-primary-container h-full rounded-full transition-all duration-500" style={{ width: `${totalTasks > 0 ? taskPercent : 0}%` }}></div>
           </div>
         </div>
 
         <div className="bg-surface-container-lowest p-space-lg rounded-xl shadow-sm flex flex-col justify-between">
           <div className="flex items-center justify-between mb-space-sm">
             <span className="font-label-md text-label-md text-on-surface-variant">{t("projects.metricDeadlines")}</span>
-            <div className="w-7 h-7 rounded-lg bg-error-container flex items-center justify-center text-error">
+            <div className={`w-7 h-7 rounded-lg ${upcomingDeadlinesCount > 0 ? "bg-error-container text-error" : "bg-surface-container text-on-surface-variant"} flex items-center justify-center`}>
               <span className="material-symbols-outlined text-[18px]">schedule</span>
             </div>
           </div>
           <div className="flex items-baseline gap-space-sm">
             <span className="font-display text-display text-on-surface">{upcomingDeadlinesCount}</span>
-            <span className="font-label-sm text-label-sm text-error font-medium">{t("projects.withinDays")}</span>
+            {upcomingDeadlinesCount > 0 ? (
+              <span className="font-label-sm text-label-sm text-error font-medium">{t("projects.withinDays")}</span>
+            ) : (
+              <span className="font-label-sm text-label-sm text-on-surface-variant font-medium">{t("projects.noDeadlines")}</span>
+            )}
           </div>
           <div className="w-full bg-surface-container-low h-1.5 rounded-full mt-3 overflow-hidden">
-            <div className="bg-error h-full rounded-full transition-all duration-500" style={{ width: `${upcomingDeadlinesPercent}%` }}></div>
+            <div className="bg-error h-full rounded-full transition-all duration-500" style={{ width: `${upcomingDeadlinesCount > 0 ? upcomingDeadlinesPercent : 0}%` }}></div>
           </div>
         </div>
 
@@ -259,12 +318,16 @@ export default function ProjectsPage() {
           </div>
           <div className="flex items-baseline gap-space-sm">
             <span className="font-display text-display text-on-surface">
-              {completedMilestones}<span className="font-headline-md text-headline-md text-on-surface-variant font-normal">/{totalMilestones}</span>
+              {completedMilestones}<span className="font-headline-md text-headline-md text-on-surface-variant font-normal"> / {totalMilestones}</span>
             </span>
-            <span className="font-label-sm text-label-sm text-tertiary font-semibold">{milestonesPercent}% {t("projects.achieved")}</span>
+            {totalMilestones > 0 ? (
+              <span className="font-label-sm text-label-sm text-tertiary font-semibold">{milestonesPercent}% {t("projects.achieved")}</span>
+            ) : (
+              <span className="font-label-sm text-label-sm text-on-surface-variant font-medium">{t("projects.noMilestones")}</span>
+            )}
           </div>
           <div className="w-full bg-surface-container-low h-1.5 rounded-full mt-3 overflow-hidden">
-            <div className="bg-tertiary-container h-full rounded-full transition-all duration-500" style={{ width: `${milestonesPercent}%` }}></div>
+            <div className="bg-tertiary-container h-full rounded-full transition-all duration-500" style={{ width: `${totalMilestones > 0 ? milestonesPercent : 0}%` }}></div>
           </div>
         </div>
       </div>
@@ -562,8 +625,8 @@ export default function ProjectsPage() {
             <p className="text-body-md text-on-surface-variant mt-1 mb-space-lg max-w-md">
               {projects.length === 0
                 ? (language === "id"
-                    ? "Mulai inisiatif baru Anda dengan membuat proyek pertama beserta milestone dan targetnya."
-                    : "Start your initiatives by creating your first project with milestones and targets.")
+                    ? "Mulai inisiatif baru Anda dengan membuat proyek pertama untuk mengelola deliverable, milestone, dan tugas Anda."
+                    : "Start your initiatives by creating your first project to track deliverables, milestones, and tasks.")
                 : (language === "id"
                     ? "Tidak ada proyek yang sesuai dengan filter yang dipilih."
                     : "No projects match the selected filter.")}
@@ -600,7 +663,9 @@ export default function ProjectsPage() {
             { id: "in-progress", label: t("projects.inProgressTab"), dot: "bg-primary" },
             { id: "completed", label: t("projects.completedTab"), dot: "bg-tertiary" },
           ].map((col) => {
-            const colProjects = filteredProjects.filter((p) => p.status === col.id);
+            const colProjects = filteredProjects.filter((p) =>
+              col.id === "in-progress" ? (p.status === "in-progress" || p.status === "in_progress") : p.status === col.id
+            );
             return (
               <div key={col.id} className="bg-surface-container-low p-space-md rounded-xl flex flex-col gap-space-md">
                 <div className="flex items-center justify-between px-space-xs">
@@ -621,6 +686,7 @@ export default function ProjectsPage() {
                     const pCompletedTasks = pTasks.length > 0
                       ? pTasks.filter((t) => t.completed).length
                       : (Number(p.completedTasks) || 0);
+                    const pCode = p.code || `PRJ-${String(filteredProjects.indexOf(p) + 1).padStart(2, "0")}`;
                     return (
                       <div
                         key={p.id}
@@ -628,7 +694,7 @@ export default function ProjectsPage() {
                         className="bg-surface-container-lowest p-space-md rounded-lg shadow-sm hover:shadow-md transition-all cursor-pointer flex flex-col gap-2 group border border-transparent hover:border-primary/30"
                       >
                         <div className="flex items-center justify-between">
-                          <span className="font-label-sm text-label-sm font-mono text-on-surface-variant">{p.code || "IGN-01"}</span>
+                          <span className="font-label-sm text-label-sm font-mono text-on-surface-variant">{pCode}</span>
                           <span className="text-[12px] text-on-surface-variant flex items-center gap-1">
                             <span className="material-symbols-outlined text-[14px]">event</span> {p.deadline}
                           </span>
@@ -679,6 +745,7 @@ export default function ProjectsPage() {
                 const pCompletedTasks = pTasks.length > 0
                   ? pTasks.filter((t) => t.completed).length
                   : (Number(p.completedTasks) || 0);
+                const pCode = p.code || `PRJ-${String(filteredProjects.indexOf(p) + 1).padStart(2, "0")}`;
                 return (
                   <tr
                     key={p.id}
@@ -691,7 +758,7 @@ export default function ProjectsPage() {
                       </div>
                       <div>
                         <span className="font-semibold text-on-surface group-hover:text-primary transition-colors block">{p.title}</span>
-                        <span className="font-label-sm text-label-sm text-on-surface-variant">{p.code || "IGN-01"}</span>
+                        <span className="font-label-sm text-label-sm text-on-surface-variant">{pCode}</span>
                       </div>
                     </td>
                     <td className="py-space-md px-space-md">
@@ -817,7 +884,7 @@ export default function ProjectsPage() {
             <div className="flex items-center justify-between mb-space-lg">
               <h2 className="font-headline-lg text-headline-lg text-on-surface">{t("projects.approachingTitle")}</h2>
               <span className="px-2 py-0.5 rounded-full bg-secondary-container text-on-secondary-container font-label-sm text-label-sm font-semibold">
-                {t("projects.sprintFocus")}
+                {t("projects.sprintFocus", { quarter: `Q${currentQuarter}` })}
               </span>
             </div>
             {approachingMilestones.length === 0 ? (
@@ -871,7 +938,9 @@ export default function ProjectsPage() {
             onClick={() => navigate("/goals")}
             className="w-full py-2 rounded-lg bg-surface-container-low hover:bg-surface-container text-on-surface font-headline-sm text-headline-sm transition-colors text-center mt-space-md cursor-pointer"
           >
-            {t("projects.viewAllMilestones")}
+            {totalAllMilestones > 0
+              ? t("projects.viewAllMilestones", { count: totalAllMilestones })
+              : t("projects.viewAllMilestonesEmpty")}
           </button>
         </div>
       </div>

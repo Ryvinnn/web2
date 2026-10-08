@@ -103,6 +103,7 @@ export const initialProjects = [
   {
     id: "p1",
     key: "ignos",
+    code: "PRJ-01",
     title: "Suru Personal Management SaaS",
     description: "Full-stack multi-user productivity platform with Laravel, Inertia, React, and Tailwind CSS.",
     category: "Web Engineering",
@@ -116,6 +117,7 @@ export const initialProjects = [
     status: "in-progress",
     statusLabel: "In Progress",
     owner: "Alex",
+    createdAt: "2026-08-15",
     milestones: [
       { id: "pm-1-1", title: "HTML & Semantic Architecture Setup", completed: true },
       { id: "pm-1-2", title: "Tailwind CSS Design System Implementation", completed: true },
@@ -129,6 +131,7 @@ export const initialProjects = [
   {
     id: "p2",
     key: "attendance",
+    code: "PRJ-02",
     title: "Smart Attendance Mobile Companion",
     description: "Geolocation-based shift check-in mobile client with live perimeter radar, schedule shifts, and leave submission.",
     category: "Mobile App",
@@ -141,6 +144,7 @@ export const initialProjects = [
     status: "in-progress",
     statusLabel: "In Progress",
     owner: "Alex",
+    createdAt: "2026-09-01",
     milestones: [
       { id: "pm-2-1", title: "Mobile UI Wireframing & Design Tokens", completed: true },
       { id: "pm-2-2", title: "Geolocation Radar & Geofence Logic", completed: true },
@@ -153,6 +157,7 @@ export const initialProjects = [
   {
     id: "p3",
     key: "portfolio",
+    code: "PRJ-03",
     title: "Personal Portfolio Website",
     description: "Minimalist editorial showcase website featuring interactive case studies, 3D project cards, and writing archive.",
     category: "Design & Frontend",
@@ -165,6 +170,7 @@ export const initialProjects = [
     status: "in-progress",
     statusLabel: "In Progress",
     owner: "Alex",
+    createdAt: "2026-10-01",
     milestones: [
       { id: "pm-3-1", title: "Portfolio Wireframes & Aesthetic Direction", completed: true },
       { id: "pm-3-2", title: "Interactive 3D Cards & Micro-animations", completed: true },
@@ -176,6 +182,7 @@ export const initialProjects = [
   {
     id: "p4",
     key: "japanese",
+    code: "PRJ-04",
     title: "Japanese JLPT Study Dashboard",
     description: "Spaced repetition flashcard engine with Kanji frequency metrics, grammar drills, and listening test tracker.",
     category: "Education",
@@ -188,6 +195,7 @@ export const initialProjects = [
     status: "planning",
     statusLabel: "Planning",
     owner: "Alex",
+    createdAt: "2026-09-20",
     milestones: [
       { id: "pm-4-1", title: "Anki Connect Integration Architecture", completed: false },
       { id: "pm-4-2", title: "Kanji Stroke Order Interactive Engine", completed: false }
@@ -198,6 +206,7 @@ export const initialProjects = [
   {
     id: "p5",
     key: "fitness",
+    code: "PRJ-05",
     title: "Fitness & Running Routine Tracker",
     description: "Pacing telemetry analysis, heart-rate zones calibration, and Garmin sync automation for endurance building.",
     category: "Health & Lifestyle",
@@ -210,6 +219,7 @@ export const initialProjects = [
     status: "completed",
     statusLabel: "Completed",
     owner: "Alex",
+    createdAt: "2026-07-10",
     milestones: [
       { id: "pm-5-1", title: "Garmin API Telemetry Pipeline", completed: true },
       { id: "pm-5-2", title: "Heart-rate Zones Matrix Calibration", completed: true },
@@ -221,6 +231,7 @@ export const initialProjects = [
   {
     id: "p6",
     key: "ai-knowledge",
+    code: "PRJ-06",
     title: "AI Knowledge Vault & Search",
     description: "RAG pipeline converting local markdown notes into vectorized embeddings with instant hybrid semantic retrieval.",
     category: "AI Research",
@@ -233,6 +244,7 @@ export const initialProjects = [
     status: "in-progress",
     statusLabel: "In Progress",
     owner: "Alex",
+    createdAt: "2026-10-02",
     milestones: [
       { id: "pm-6-1", title: "LangChain RAG Pipeline Setup", completed: true },
       { id: "pm-6-2", title: "pgvector Hybrid Semantic Retrieval", completed: false },
