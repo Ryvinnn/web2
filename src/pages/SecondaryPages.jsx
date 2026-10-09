@@ -4,41 +4,136 @@ import { useWorkspace } from "../context/WorkspaceContext";
 import { parseAnyDate } from "../utils/attention";
 
 export function ProgressPage() {
-  const { projects, goals, language, t } = useWorkspace();
+  const { projects, goals, tasks, language, t, openModal, openProjectModal } = useWorkspace();
+  const [pipelineFilter, setPipelineFilter] = useState("active"); // 'active' | 'all'
 
-  const totalInitiatives = projects.length + goals.length;
-  const overallProgress = totalInitiatives > 0
-    ? Math.round(([...projects, ...goals].reduce((acc, item) => acc + (Number(item.progress) || 0), 0)) / totalInitiatives)
+  // Card A: Overall Goal Progress (derived strictly from current user's actual goals)
+  const totalGoals = goals.length;
+  const overallGoalProgress = totalGoals > 0
+    ? Math.round(goals.reduce((acc, g) => acc + (Number(g.progress) || 0), 0) / totalGoals)
     : 0;
 
-  const projectsProgress = projects.length > 0
-    ? (projects.reduce((acc, p) => acc + (Number(p.progress) || 0), 0) / projects.length).toFixed(1)
-    : "0";
+  const activeGoals = useMemo(
+    () => goals.filter((g) => g.status === "in_progress" || (g.status !== "completed" && (Number(g.progress) || 0) < 100)),
+    [goals]
+  );
+  const activeGoalsCount = activeGoals.length;
 
-  let totalMilestones = 0;
-  let completedMilestones = 0;
-  goals.forEach((g) => {
-    if (Array.isArray(g.milestones) && g.milestones.length > 0) {
-      totalMilestones += g.milestones.length;
-      completedMilestones += g.milestones.filter((m) => m.completed).length;
-    } else if (g.totalCount) {
-      totalMilestones += Number(g.totalCount) || 0;
-      completedMilestones += Number(g.doneCount) || 0;
-    }
-  });
-  projects.forEach((p) => {
-    if (p.milestones) {
-      totalMilestones += Number(p.milestones) || 0;
-      if (p.status === "completed") {
-        completedMilestones += Number(p.milestones) || 0;
+  let overallGoalDesc = "";
+  if (totalGoals === 0) {
+    overallGoalDesc = t("secondary.progress.noGoals", language === "id" ? "Belum ada target" : "No goals yet");
+  } else if (activeGoalsCount === 0) {
+    overallGoalDesc = t(
+      "secondary.progress.overallDescAllDone",
+      { total: totalGoals },
+      language === "id" ? `Semua ${totalGoals} target selesai` : `All ${totalGoals} goals completed`
+    );
+  } else {
+    overallGoalDesc = t(
+      "secondary.progress.overallDesc",
+      { total: totalGoals, active: activeGoalsCount },
+      language === "id"
+        ? `Rata-rata di seluruh ${totalGoals} target (${activeGoalsCount} aktif)`
+        : `Average across ${totalGoals} ${totalGoals === 1 ? "goal" : "goals"} (${activeGoalsCount} active)`
+    );
+  }
+
+  // Card B: Project Completion (derived strictly from current user's actual projects)
+  const totalProjects = projects.length;
+  const completedProjects = useMemo(
+    () => projects.filter((p) => p.status === "completed" || (Number(p.progress) || 0) >= 100),
+    [projects]
+  );
+  const completedProjectsCount = completedProjects.length;
+
+  const planningProjects = useMemo(
+    () => projects.filter((p) => p.status === "planning" && (Number(p.progress) || 0) < 100),
+    [projects]
+  );
+  const planningProjectsCount = planningProjects.length;
+
+  const inProgressProjects = useMemo(
+    () =>
+      projects.filter(
+        (p) =>
+          (p.status === "in-progress" ||
+            p.status === "in_progress" ||
+            (!p.status && (Number(p.progress) || 0) < 100) ||
+            (p.status !== "planning" && p.status !== "completed")) &&
+          (Number(p.progress) || 0) < 100
+      ),
+    [projects]
+  );
+  const inProgressProjectsCount = inProgressProjects.length;
+
+  const projectCompletionPercent = totalProjects > 0
+    ? Math.round((completedProjectsCount / totalProjects) * 100)
+    : 0;
+
+  let projectCompletionDesc = "";
+  if (totalProjects === 0) {
+    projectCompletionDesc = language === "id"
+      ? "0 selesai / 0 total • Belum ada proyek"
+      : "0 completed / 0 total • No projects yet";
+  } else {
+    const breakdownText = t(
+      "secondary.progress.projectsDesc",
+      {
+        inProgress: inProgressProjectsCount,
+        planning: planningProjectsCount,
+        completed: completedProjectsCount
+      },
+      language === "id"
+        ? `${inProgressProjectsCount} Berjalan, ${planningProjectsCount} Perencanaan, ${completedProjectsCount} Selesai`
+        : `${inProgressProjectsCount} In Progress, ${planningProjectsCount} Planned, ${completedProjectsCount} Completed`
+    );
+    projectCompletionDesc = `${breakdownText} (${completedProjectsCount}/${totalProjects} ${language === "id" ? "selesai" : "completed"})`;
+  }
+
+  // Card C: Milestone Execution (derived strictly from current user's actual project milestones)
+  const { totalMilestones, completedMilestones, milestonePercent } = useMemo(() => {
+    let total = 0;
+    let completed = 0;
+    projects.forEach((p) => {
+      if (Array.isArray(p.milestones)) {
+        total += p.milestones.length;
+        completed += p.milestones.filter((m) => !!m.completed).length;
       }
-    }
-  });
+    });
+    const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
+    return { totalMilestones: total, completedMilestones: completed, milestonePercent: percent };
+  }, [projects]);
 
-  const milestonePercent = totalMilestones > 0 ? Math.round((completedMilestones / totalMilestones) * 100) : 0;
+  let milestoneDesc = "";
+  if (totalMilestones === 0) {
+    milestoneDesc = t("secondary.progress.noMilestones", language === "id" ? "Belum ada milestone" : "No milestones yet");
+  } else {
+    milestoneDesc = t(
+      "secondary.progress.milestonesDesc",
+      { percent: milestonePercent, completed: completedMilestones, total: totalMilestones },
+      language === "id"
+        ? `${milestonePercent}% deliverable terencana terpenuhi (${completedMilestones}/${totalMilestones})`
+        : `${milestonePercent}% of planned deliverables completed (${completedMilestones}/${totalMilestones})`
+    );
+  }
+
+  // Active Project Pipeline (derived from real projects filtered by actual status)
+  const activeProjects = useMemo(() => {
+    return projects.filter(
+      (p) =>
+        (p.status === "in-progress" ||
+          p.status === "in_progress" ||
+          (!p.status && (Number(p.progress) || 0) < 100) ||
+          (p.status !== "planning" && p.status !== "completed")) &&
+        (Number(p.progress) || 0) < 100
+    );
+  }, [projects]);
+
+  const displayedProjects = pipelineFilter === "all" ? projects : activeProjects;
 
   return (
     <div className="flex flex-col w-full gap-space-xl">
+      {/* Header */}
       <div className="flex flex-col gap-space-xs">
         <div className="flex items-center gap-space-sm">
           <span className="px-2.5 py-0.5 rounded-full bg-secondary-container text-on-secondary-container font-label-sm text-label-sm uppercase tracking-wider">
@@ -57,82 +152,236 @@ export function ProgressPage() {
         </p>
       </div>
 
+      {/* 3 Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-space-lg">
+        {/* Card A: Overall Goal Progress */}
         <div className="bg-surface-container-lowest p-space-md sm:p-space-xl rounded-xl shadow-sm">
           <span className="font-label-sm text-label-sm uppercase text-on-surface-variant">
             {t("secondary.progress.overallTitle")}
           </span>
-          <div className="text-display font-display text-primary mt-2">{overallProgress}%</div>
+          <div className="text-display font-display text-primary mt-2">{overallGoalProgress}%</div>
           <p className="text-body-sm text-on-surface-variant mt-1">
-            {t("secondary.progress.overallDesc")}
+            {overallGoalDesc}
           </p>
           <div className="w-full bg-surface-container h-2 rounded-full mt-4 overflow-hidden">
-            <div className="bg-primary h-full rounded-full transition-all duration-300" style={{ width: `${overallProgress}%` }}></div>
+            <div
+              className="bg-primary h-full rounded-full transition-all duration-300"
+              style={{ width: `${overallGoalProgress}%` }}
+            ></div>
           </div>
         </div>
 
+        {/* Card B: Project Completion */}
         <div className="bg-surface-container-lowest p-space-md sm:p-space-xl rounded-xl shadow-sm">
           <span className="font-label-sm text-label-sm uppercase text-on-surface-variant">
             {t("secondary.progress.projectsTitle")}
           </span>
-          <div className="text-display font-display text-tertiary mt-2">{projectsProgress}%</div>
+          <div className="text-display font-display text-tertiary mt-2">
+            {projectCompletionPercent}%
+          </div>
           <p className="text-body-sm text-on-surface-variant mt-1">
-            {t("secondary.progress.projectsDesc")}
+            {projectCompletionDesc}
           </p>
           <div className="w-full bg-surface-container h-2 rounded-full mt-4 overflow-hidden">
-            <div className="bg-tertiary h-full rounded-full transition-all duration-300" style={{ width: `${Math.min(100, Number(projectsProgress))}%` }}></div>
+            <div
+              className="bg-tertiary h-full rounded-full transition-all duration-300"
+              style={{ width: `${projectCompletionPercent}%` }}
+            ></div>
           </div>
         </div>
 
+        {/* Card C: Milestone Execution */}
         <div className="bg-surface-container-lowest p-space-md sm:p-space-xl rounded-xl shadow-sm sm:col-span-2 md:col-span-1">
           <span className="font-label-sm text-label-sm uppercase text-on-surface-variant">
             {t("secondary.progress.milestonesTitle")}
           </span>
-          <div className="text-display font-display text-on-surface mt-2">{completedMilestones} / {totalMilestones}</div>
+          <div className="text-display font-display text-on-surface mt-2">
+            {completedMilestones} / {totalMilestones}
+          </div>
           <p className="text-body-sm text-on-surface-variant mt-1">
-            {t("secondary.progress.milestonesDesc")}
+            {milestoneDesc}
           </p>
           <div className="w-full bg-surface-container h-2 rounded-full mt-4 overflow-hidden">
-            <div className="bg-secondary h-full rounded-full transition-all duration-300" style={{ width: `${milestonePercent}%` }}></div>
+            <div
+              className="bg-secondary h-full rounded-full transition-all duration-300"
+              style={{ width: `${milestonePercent}%` }}
+            ></div>
           </div>
         </div>
       </div>
 
+      {/* Active Project Pipeline Section */}
       <div className="bg-surface-container-lowest p-space-xl rounded-xl shadow-sm">
-        <h3 className="text-headline-md font-headline-md text-on-surface mb-space-md">
-          {t("secondary.progress.activePipelines")}
-        </h3>
-        <div className="space-y-space-md">
-          {projects.map((p) => (
-            <div key={p.id} className="p-space-md bg-surface-container-low rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-space-md">
-              <div className="flex items-center gap-space-md">
-                <div className="w-10 h-10 rounded-lg bg-surface-container-highest text-primary flex items-center justify-center">
-                  <span className="material-symbols-outlined text-[20px]">{p.icon}</span>
-                </div>
-                <div>
-                  <h4 className="font-headline-sm text-headline-sm text-on-surface">{p.title}</h4>
-                  <span className="text-label-sm text-on-surface-variant">
-                    {p.category} • {p.completedTasks}/{p.totalTasks} {t("secondary.progress.tasksLabel")}
-                  </span>
-                </div>
-              </div>
-              <div className="w-full md:w-64">
-                <div className="flex justify-between text-label-sm mb-1">
-                  <span className="text-on-surface-variant">{t("secondary.progress.completionLabel")}</span>
-                  <span className="font-bold text-on-surface">{p.progress}%</span>
-                </div>
-                <div className="w-full bg-surface-container h-2 rounded-full overflow-hidden">
-                  <div className="bg-primary h-full rounded-full" style={{ width: `${p.progress}%` }}></div>
-                </div>
-              </div>
-            </div>
-          ))}
-          {projects.length === 0 && (
-            <div className="p-space-xl text-center text-on-surface-variant font-label-md">
-              {language === "id" ? "Belum ada inisiatif proyek aktif." : "No active project pipelines."}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-space-sm mb-space-md">
+          <div className="flex items-center gap-space-sm">
+            <span className="material-symbols-outlined text-primary text-[22px]">rocket_launch</span>
+            <h3 className="text-headline-md font-headline-md text-on-surface">
+              {t("secondary.progress.activePipelines")}
+            </h3>
+          </div>
+          {projects.length > 0 && (
+            <div className="flex items-center gap-1 bg-surface-container-low p-1 rounded-lg self-start sm:self-auto">
+              <button
+                type="button"
+                onClick={() => setPipelineFilter("active")}
+                className={`px-3 py-1 rounded-md text-label-sm font-label-sm transition-all cursor-pointer ${
+                  pipelineFilter === "active"
+                    ? "bg-primary text-on-primary font-semibold shadow-xs"
+                    : "text-on-surface-variant hover:text-on-surface"
+                }`}
+              >
+                {t("secondary.progress.tabActive", "Aktif")} ({activeProjects.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setPipelineFilter("all")}
+                className={`px-3 py-1 rounded-md text-label-sm font-label-sm transition-all cursor-pointer ${
+                  pipelineFilter === "all"
+                    ? "bg-primary text-on-primary font-semibold shadow-xs"
+                    : "text-on-surface-variant hover:text-on-surface"
+                }`}
+              >
+                {t("secondary.progress.tabAll", "Semua")} ({projects.length})
+              </button>
             </div>
           )}
         </div>
+
+        {/* Pipeline Content State Handling */}
+        {projects.length === 0 ? (
+          /* State 1: General empty state when projects collection is truly empty */
+          <div className="py-12 px-4 text-center flex flex-col items-center justify-center rounded-xl bg-surface-container-low/50 border border-dashed border-outline-variant/40">
+            <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-primary mb-3">
+              <span className="material-symbols-outlined text-[24px]">folder_open</span>
+            </div>
+            <h4 className="font-headline-sm text-headline-sm text-on-surface mb-1">
+              {language === "id" ? "Belum Ada Proyek" : "No Projects Yet"}
+            </h4>
+            <p className="font-body-sm text-body-sm text-on-surface-variant max-w-sm mb-4">
+              {language === "id"
+                ? "Belum ada inisiatif proyek yang dibuat di workspace Anda. Buat proyek pertama untuk memulai pipeline."
+                : "No project initiatives have been created in your workspace yet. Create your first project to start the pipeline."}
+            </p>
+            <button
+              type="button"
+              onClick={() => openModal("project")}
+              className="px-4 py-2 rounded-lg bg-primary text-on-primary font-label-md text-label-md hover:bg-primary-container transition-colors shadow-sm flex items-center gap-1.5 cursor-pointer"
+            >
+              <span className="material-symbols-outlined text-[18px]">add</span>
+              <span>{t("secondary.progress.createProject", "Buat Proyek Baru")}</span>
+            </button>
+          </div>
+        ) : displayedProjects.length === 0 ? (
+          /* State 2: Projects exist, but none qualify as active */
+          <div className="py-10 px-4 text-center flex flex-col items-center justify-center rounded-xl bg-surface-container-low border border-outline-variant/20">
+            <div className="w-12 h-12 rounded-full bg-surface-container flex items-center justify-center text-on-surface-variant mb-3">
+              <span className="material-symbols-outlined text-[24px]">task_alt</span>
+            </div>
+            <h4 className="font-headline-sm text-headline-sm text-on-surface mb-1">
+              {t("secondary.progress.noActiveProjects", "Tidak ada proyek aktif saat ini")}
+            </h4>
+            <p className="font-body-sm text-body-sm text-on-surface-variant max-w-md mb-4">
+              {t(
+                "secondary.progress.noActiveProjectsDesc",
+                { total: projects.length },
+                language === "id"
+                  ? `Semua ${projects.length} proyek Anda saat ini berstatus Selesai atau Perencanaan.`
+                  : `All ${projects.length} of your projects are currently Completed or in Planning.`
+              )}
+            </p>
+            <div className="flex items-center gap-2 flex-wrap justify-center">
+              <button
+                type="button"
+                onClick={() => setPipelineFilter("all")}
+                className="px-3.5 py-1.5 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface font-label-md text-label-md transition-colors cursor-pointer"
+              >
+                {t("secondary.progress.viewAllProjects", "Lihat Semua Proyek")} ({projects.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => openModal("project")}
+                className="px-3.5 py-1.5 rounded-lg bg-primary text-on-primary font-label-md text-label-md hover:bg-primary-container transition-colors shadow-sm cursor-pointer flex items-center gap-1"
+              >
+                <span className="material-symbols-outlined text-[16px]">add</span>
+                <span>{t("secondary.progress.createProject", "Buat Proyek Baru")}</span>
+              </button>
+            </div>
+          </div>
+        ) : (
+          /* State 3: Active / selected projects list */
+          <div className="space-y-space-md">
+            {displayedProjects.map((p) => {
+              const pTasks = (tasks || []).filter(
+                (t) => t.projectId === p.id || (p.key && t.projectId === p.key) || t.project === p.title
+              );
+              const totalTasksCount = pTasks.length > 0 ? pTasks.length : (Number(p.totalTasks) || 0);
+              const completedTasksCount = pTasks.length > 0
+                ? pTasks.filter((t) => t.completed).length
+                : (Number(p.completedTasks) || 0);
+
+              const pMilestones = Array.isArray(p.milestones) ? p.milestones : [];
+              const completedPMilestones = pMilestones.filter((m) => !!m.completed).length;
+
+              const isCompleted = p.status === "completed" || (Number(p.progress) || 0) === 100;
+              const isPlanning = p.status === "planning";
+              const statusText = isCompleted
+                ? (language === "id" ? "Selesai" : "Completed")
+                : isPlanning
+                ? (language === "id" ? "Perencanaan" : "Planning")
+                : (language === "id" ? "Sedang Berjalan" : "In Progress");
+
+              const statusBadgeClass = isCompleted
+                ? "bg-tertiary/10 text-tertiary"
+                : isPlanning
+                ? "bg-secondary-container text-on-secondary-container"
+                : "bg-primary/10 text-primary";
+
+              return (
+                <div
+                  key={p.id}
+                  onClick={() => openProjectModal(p.key || p.id)}
+                  className="p-space-md bg-surface-container-low hover:bg-surface-container rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-space-md transition-all cursor-pointer group"
+                >
+                  <div className="flex items-center gap-space-md min-w-0">
+                    <div className="w-10 h-10 rounded-lg bg-surface-container-highest text-primary flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform">
+                      <span className="material-symbols-outlined text-[20px]">{p.icon || "source"}</span>
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h4 className="font-headline-sm text-headline-sm text-on-surface truncate group-hover:text-primary transition-colors">
+                          {p.title}
+                        </h4>
+                        <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${statusBadgeClass}`}>
+                          {statusText}
+                        </span>
+                      </div>
+                      <span className="text-label-sm text-on-surface-variant truncate block mt-0.5">
+                        {p.category || "Inisiatif"} • {completedTasksCount}/{totalTasksCount} {t("secondary.progress.tasksLabel", "Tugas")}
+                        {pMilestones.length > 0 && (
+                          <> • {completedPMilestones}/{pMilestones.length} {t("projects.milestonesCount", "Milestone")}</>
+                        )}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="w-full md:w-64 flex-shrink-0">
+                    <div className="flex justify-between text-label-sm mb-1">
+                      <span className="text-on-surface-variant">{t("secondary.progress.completionLabel", "Penyelesaian")}</span>
+                      <span className="font-bold text-on-surface">{p.progress || 0}%</span>
+                    </div>
+                    <div className="w-full bg-surface-container h-2 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all duration-300 ${
+                          isCompleted ? "bg-tertiary" : "bg-primary"
+                        }`}
+                        style={{ width: `${Math.min(100, Number(p.progress) || 0)}%` }}
+                      ></div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );
