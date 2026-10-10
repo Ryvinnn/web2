@@ -238,10 +238,23 @@ CREATE POLICY "Users can insert their own activity feed"
   ON public.activity_feed FOR INSERT
   WITH CHECK (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can update their own activity feed" ON public.activity_feed;
+CREATE POLICY "Users can update their own activity feed"
+  ON public.activity_feed FOR UPDATE
+  USING (auth.uid() = user_id);
+
 DROP POLICY IF EXISTS "Users can delete their own activity feed" ON public.activity_feed;
 CREATE POLICY "Users can delete their own activity feed"
   ON public.activity_feed FOR DELETE
   USING (auth.uid() = user_id);
+
+-- Explicit Grants for Authenticated Users
+GRANT ALL ON TABLE public.user_profiles TO authenticated;
+GRANT ALL ON TABLE public.projects TO authenticated;
+GRANT ALL ON TABLE public.goals TO authenticated;
+GRANT ALL ON TABLE public.tasks TO authenticated;
+GRANT ALL ON TABLE public.notes TO authenticated;
+GRANT ALL ON TABLE public.activity_feed TO authenticated;
 
 -- ==============================================================================
 -- Trigger to automatically create a user profile when a new user signs up
@@ -266,3 +279,4 @@ DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();
+
