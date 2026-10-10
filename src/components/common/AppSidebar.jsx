@@ -20,10 +20,14 @@ export default function AppSidebar() {
     { name: t("sidebar.statistics"), path: "/statistics", icon: "bar_chart" }
   ];
 
-  const bottomNav = [
-    { name: t("sidebar.settings"), path: "/settings", icon: "settings" },
-    { name: t("sidebar.logout"), path: "/logout", icon: "logout" }
-  ];
+  const bottomNav = user
+    ? [
+        { name: t("sidebar.settings"), path: "/settings", icon: "settings" },
+        { name: t("sidebar.logout"), path: "/logout", icon: "logout" }
+      ]
+    : [
+        { name: t("sidebar.settings"), path: "/settings", icon: "settings" }
+      ];
 
   const linkClass = ({ isActive }) =>
     `flex items-center gap-space-md px-space-md py-space-sm rounded-lg transition-colors font-body-md text-body-md ${
@@ -134,27 +138,69 @@ export default function AppSidebar() {
             ))}
           </nav>
 
-          {/* User Card */}
-          <div
-            onClick={() => {
-              navigate("/settings");
-              closeSidebar();
-            }}
-            className="flex items-center justify-between p-space-sm rounded-lg bg-surface-container-low cursor-pointer hover:bg-surface-container transition-colors"
-          >
-            <div className="flex items-center gap-space-sm min-w-0">
-              <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center flex-shrink-0 text-on-primary font-bold text-xs select-none">
-                {user?.initials || "LB"}
+          {/* User Card / Guest Card */}
+          {user ? (
+            <div
+              onClick={() => {
+                navigate("/settings");
+                closeSidebar();
+              }}
+              className="flex items-center justify-between p-space-sm rounded-lg bg-surface-container-low cursor-pointer hover:bg-surface-container transition-colors"
+            >
+              <div className="flex items-center gap-space-sm min-w-0">
+                <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center flex-shrink-0 text-on-primary font-bold text-xs select-none">
+                  {user?.initials || "AU"}
+                </div>
+                <div className="flex flex-col min-w-0">
+                  <span className="font-label-md text-label-md text-on-surface truncate">{user?.name}</span>
+                  <span className="font-label-sm text-label-sm text-on-surface-variant truncate">
+                    {user?.email}
+                  </span>
+                </div>
               </div>
-              <div className="flex flex-col min-w-0">
-                <span className="font-label-md text-label-md text-on-surface truncate">{user?.name || currentUserName}</span>
-                <span className="font-label-sm text-label-sm text-on-surface-variant truncate">
-                  {t("sidebar.adminUser")}
-                </span>
+              <span className="material-symbols-outlined text-on-surface-variant text-[18px]">settings</span>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2 p-space-sm rounded-xl bg-surface-container-low border border-surface-container/60">
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="w-7 h-7 rounded-full bg-surface-container flex items-center justify-center flex-shrink-0 text-primary">
+                  <span className="material-symbols-outlined text-[16px]">person_outline</span>
+                </div>
+                <div className="flex flex-col min-w-0 flex-1">
+                  <span className="font-label-md text-label-md text-on-surface font-semibold truncate leading-tight">
+                    {t("sidebar.guestMode")}
+                  </span>
+                  <span className="text-[11px] text-on-surface-variant truncate leading-none">
+                    {t("sidebar.guestStoredLocally")}
+                  </span>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-1.5 pt-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigate("/login");
+                    closeSidebar();
+                  }}
+                  className="py-1.5 px-2 rounded-lg bg-primary text-on-primary font-label-sm text-label-sm font-semibold hover:bg-primary-container transition-colors text-center shadow-xs flex items-center justify-center gap-1 cursor-pointer"
+                >
+                  <span className="material-symbols-outlined text-[14px]">login</span>
+                  <span>{t("sidebar.login")}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigate("/signup");
+                    closeSidebar();
+                  }}
+                  className="py-1.5 px-2 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface font-label-sm text-label-sm font-semibold transition-colors text-center flex items-center justify-center gap-1 cursor-pointer"
+                >
+                  <span className="material-symbols-outlined text-[14px]">person_add</span>
+                  <span>{t("sidebar.signUp")}</span>
+                </button>
               </div>
             </div>
-            <span className="material-symbols-outlined text-on-surface-variant text-[18px]">settings</span>
-          </div>
+          )}
         </div>
       </aside>
     </>

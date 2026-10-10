@@ -202,60 +202,132 @@ export default function AppHeader() {
 
         {/* User Profile Avatar with Online Pill & Menu Popover */}
         <div className="relative pl-0 sm:pl-space-xs flex-shrink-0" ref={userMenuRef}>
-          <div
-            onClick={() => setUserMenuOpen((prev) => !prev)}
-            className="cursor-pointer relative"
-            title="User Profile"
-          >
-            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-primary flex items-center justify-center shadow-xs text-on-primary font-bold text-[11px] sm:text-xs select-none">
-              {user?.initials || "LB"}
+          {user ? (
+            <div
+              onClick={() => setUserMenuOpen((prev) => !prev)}
+              className="cursor-pointer relative"
+              title="User Profile"
+            >
+              <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-primary flex items-center justify-center shadow-xs text-on-primary font-bold text-[11px] sm:text-xs select-none">
+                {user?.initials || "AU"}
+              </div>
+              <span className="absolute bottom-0 right-0 w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full bg-tertiary ring-2 ring-surface"></span>
             </div>
-            <span className="absolute bottom-0 right-0 w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full bg-tertiary ring-2 ring-surface"></span>
-          </div>
+          ) : (
+            <div
+              onClick={() => setUserMenuOpen((prev) => !prev)}
+              className="cursor-pointer flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-container-low hover:bg-surface-container transition-colors text-on-surface-variant border border-surface-container shadow-xs"
+              title="Guest Mode"
+            >
+              <span className="material-symbols-outlined text-[18px] text-primary">person_outline</span>
+              <span className="hidden sm:inline text-[12px] font-semibold text-on-surface">
+                {language === "id" ? "Mode Tamu" : "Guest Mode"}
+              </span>
+            </div>
+          )}
 
           {/* User Menu Dropdown */}
           {userMenuOpen && (
-            <div className="absolute right-0 top-10 sm:top-11 w-56 max-w-[calc(100vw-1.5rem)] bg-surface-container-lowest rounded-2xl shadow-2xl p-space-md z-50 border border-surface-container flex flex-col gap-1 animate-in fade-in zoom-in-95 duration-150">
-              <div className="px-2 py-1.5 border-b border-surface-container mb-1">
-                <span className="font-headline-sm text-headline-sm font-semibold text-on-surface block truncate">{user?.name || currentUserName}</span>
-                <span className="font-label-sm text-label-sm text-on-surface-variant block truncate">{user?.email || "laba@suru.workspace"}</span>
-                <span className="mt-1 inline-block px-1.5 py-0.2 rounded text-[10px] font-bold bg-primary/10 text-primary uppercase">
-                  {t("sidebar.adminUser")}
-                </span>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setUserMenuOpen(false);
-                  navigate("/settings");
-                }}
-                className="w-full text-left px-2.5 py-2 rounded-lg hover:bg-surface-container-low flex items-center gap-2 text-on-surface font-label-md text-label-md transition-colors"
-              >
-                <span className="material-symbols-outlined text-[18px] text-on-surface-variant">settings</span>
-                <span>{t("sidebar.settings")}</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setLanguage(language === "id" ? "en" : "id");
-                }}
-                className="w-full text-left px-2.5 py-2 rounded-lg hover:bg-surface-container-low flex items-center gap-2 text-on-surface font-label-md text-label-md transition-colors"
-              >
-                <span className="material-symbols-outlined text-[18px] text-primary">translate</span>
-                <span>{language === "id" ? "Switch to English" : "Ganti ke Indonesia"}</span>
-              </button>
-              <div className="border-t border-surface-container my-0.5"></div>
-              <button
-                type="button"
-                onClick={() => {
-                  setUserMenuOpen(false);
-                  navigate("/logout");
-                }}
-                className="w-full text-left px-2.5 py-2 rounded-lg hover:bg-error/10 text-error flex items-center gap-2 font-label-md text-label-md transition-colors"
-              >
-                <span className="material-symbols-outlined text-[18px]">logout</span>
-                <span>{t("sidebar.logout")}</span>
-              </button>
+            <div className="absolute right-0 top-10 sm:top-11 w-60 max-w-[calc(100vw-1.5rem)] bg-surface-container-lowest rounded-2xl shadow-2xl p-space-md z-50 border border-surface-container flex flex-col gap-1 animate-in fade-in zoom-in-95 duration-150">
+              {user ? (
+                <>
+                  <div className="px-2 py-1.5 border-b border-surface-container mb-1">
+                    <span className="font-headline-sm text-headline-sm font-semibold text-on-surface block truncate">{user.name}</span>
+                    <span className="font-label-sm text-label-sm text-on-surface-variant block truncate">{user.email}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setUserMenuOpen(false);
+                      navigate("/settings");
+                    }}
+                    className="w-full text-left px-2.5 py-2 rounded-lg hover:bg-surface-container-low flex items-center gap-2 text-on-surface font-label-md text-label-md transition-colors"
+                  >
+                    <span className="material-symbols-outlined text-[18px] text-on-surface-variant">settings</span>
+                    <span>{t("sidebar.settings")}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLanguage(language === "id" ? "en" : "id");
+                    }}
+                    className="w-full text-left px-2.5 py-2 rounded-lg hover:bg-surface-container-low flex items-center gap-2 text-on-surface font-label-md text-label-md transition-colors"
+                  >
+                    <span className="material-symbols-outlined text-[18px] text-primary">translate</span>
+                    <span>{language === "id" ? "Switch to English" : "Ganti ke Indonesia"}</span>
+                  </button>
+                  <div className="border-t border-surface-container my-0.5"></div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setUserMenuOpen(false);
+                      navigate("/logout");
+                    }}
+                    className="w-full text-left px-2.5 py-2 rounded-lg hover:bg-error/10 text-error flex items-center gap-2 font-label-md text-label-md transition-colors"
+                  >
+                    <span className="material-symbols-outlined text-[18px]">logout</span>
+                    <span>{t("sidebar.logout")}</span>
+                  </button>
+                </>
+              ) : (
+                <>
+                  <div className="px-2 py-1.5 border-b border-surface-container mb-1">
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      <span className="w-2 h-2 rounded-full bg-secondary"></span>
+                      <span className="font-headline-sm text-headline-sm font-semibold text-on-surface block">
+                        {t("auth.guestModeLabel")}
+                      </span>
+                    </div>
+                    <span className="font-label-sm text-label-sm text-on-surface-variant block">
+                      {t("auth.guestModeDesc")}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setUserMenuOpen(false);
+                      navigate("/login");
+                    }}
+                    className="w-full text-left px-2.5 py-2 rounded-lg bg-primary/10 hover:bg-primary/15 text-primary flex items-center gap-2 font-label-md text-label-md font-semibold transition-colors"
+                  >
+                    <span className="material-symbols-outlined text-[18px]">login</span>
+                    <span>{t("sidebar.login")}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setUserMenuOpen(false);
+                      navigate("/signup");
+                    }}
+                    className="w-full text-left px-2.5 py-2 rounded-lg hover:bg-surface-container-low flex items-center gap-2 text-on-surface font-label-md text-label-md transition-colors"
+                  >
+                    <span className="material-symbols-outlined text-[18px] text-on-surface-variant">person_add</span>
+                    <span>{t("sidebar.signUp")}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setUserMenuOpen(false);
+                      navigate("/settings");
+                    }}
+                    className="w-full text-left px-2.5 py-2 rounded-lg hover:bg-surface-container-low flex items-center gap-2 text-on-surface font-label-md text-label-md transition-colors"
+                  >
+                    <span className="material-symbols-outlined text-[18px] text-on-surface-variant">settings</span>
+                    <span>{t("sidebar.settings")}</span>
+                  </button>
+                  <div className="border-t border-surface-container my-0.5"></div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLanguage(language === "id" ? "en" : "id");
+                    }}
+                    className="w-full text-left px-2.5 py-2 rounded-lg hover:bg-surface-container-low flex items-center gap-2 text-on-surface font-label-md text-label-md transition-colors"
+                  >
+                    <span className="material-symbols-outlined text-[18px] text-primary">translate</span>
+                    <span>{language === "id" ? "Switch to English" : "Ganti ke Indonesia"}</span>
+                  </button>
+                </>
+              )}
             </div>
           )}
         </div>

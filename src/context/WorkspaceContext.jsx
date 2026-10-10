@@ -14,8 +14,37 @@ import {
   formatLocalDateToISO,
   calculateStreakMetrics
 } from "../utils/dateTime";
+import { supabase, isSupabaseConfigured } from "../utils/supabaseClient";
+import {
+  fetchUserRemoteData,
+  migrateGuestData as runGuestMigration
+} from "../utils/dataSync";
 
 const WorkspaceContext = createContext(null);
+
+// Storage key helpers for user-scoped persistence
+function getUserStorageKey(baseKey, userObj) {
+  const userIdentifier = userObj?.id || userObj?.email;
+  if (!userIdentifier) {
+    // Isolated guest storage key
+    return `ignos_guest_${baseKey.replace("ignos_", "")}`;
+  }
+  return `${baseKey}_${userIdentifier.trim().toLowerCase().replace(/[^a-z0-9_]/g, "_")}`;
+}
+
+function loadCollection(baseKey, currentUser) {
+  try {
+    const userKey = getUserStorageKey(baseKey, currentUser);
+    const userSaved = localStorage.getItem(userKey);
+    if (userSaved !== null) {
+      const parsed = JSON.parse(userSaved);
+      return Array.isArray(parsed) ? parsed : [];
+    }
+    return [];
+  } catch {
+    return [];
+  }
+}
 
 export function WorkspaceProvider({ children }) {
   // Language state ('id' or 'en')
@@ -37,7 +66,6 @@ export function WorkspaceProvider({ children }) {
 
   useEffect(() => {
     const updateTime = () => setCurrentDate(new Date());
-    // Update every 30 seconds to catch minute/hour boundaries promptly
     const timer = setInterval(updateTime, 30000);
     window.addEventListener("focus", updateTime);
     document.addEventListener("visibilitychange", updateTime);
@@ -50,24 +78,54 @@ export function WorkspaceProvider({ children }) {
 
   const timePeriod = getTimePeriod(currentDate);
 
-  // User authentication / profile state
+  // User authentication state (Default to Guest Mode: null)
   const [user, setUser] = useState(() => {
     try {
       const saved = localStorage.getItem("ignos_user");
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        // Discard any legacy demo user
+        if (parsed && parsed.email && parsed.email !== "laba@suru.workspace") {
+          return parsed;
+        } else {
+          localStorage.removeItem("ignos_user");
+        }
+      }
     } catch (e) {
       console.error("Failed to load user from localStorage:", e);
     }
-    return {
-      name: "Laba",
-      email: "laba@suru.workspace",
-      role: "Admin User",
-      initials: "LB"
-    };
+    return null;
   });
 
-  const updateUser = (updates) => {
+  const isAuthenticated = Boolean(user && (user.id || user.email));
+  const isGuest = !isAuthenticated;
+
+  // Pending migration state if local guest data was detected upon login/signup
+  const [pendingMigrationData, setPendingMigrationData] = useState(null);
+
+  const checkGuestDataForMigration = useCallback(() => {
+    const gGoals = loadCollection("ignos_goals", null);
+    const gProjects = loadCollection("ignos_projects", null);
+    const gTasks = loadCollection("ignos_tasks", null);
+    const gNotes = loadCollection("ignos_notes", null);
+    const gActivity = loadCollection("ignos_activity_feed", null);
+
+    const hasData = gGoals.length > 0 || gProjects.length > 0 || gTasks.length > 0 || gNotes.length > 0;
+    if (hasData) {
+      return {
+        goals: gGoals,
+        projects: gProjects,
+        tasks: gTasks,
+        notes: gNotes,
+        activityFeed: gActivity
+      };
+    }
+    return null;
+  }, []);
+
+  const updateUser = async (updates) => {
     setUser((prev) => {
+      if (!prev) return prev;
       const next = { ...prev, ...updates };
       if (updates.name !== undefined) {
         const trimmed = (updates.name || "").trim();
@@ -85,10 +143,21 @@ export function WorkspaceProvider({ children }) {
       }
       return next;
     });
+
+    if (isSupabaseConfigured() && supabase && user?.id && updates.name) {
+      try {
+        await supabase.from("user_profiles").upsert({
+          id: user.id,
+          name: updates.name,
+          updated_at: new Date().toISOString()
+        });
+      } catch (e) {
+        console.warn("Failed to sync updated profile to Supabase:", e);
+      }
+    }
   };
 
-  const fallbackUserName = language === "id" ? "Pengguna Admin" : "Admin User";
-  const currentUserName = (user && user.name && user.name.trim()) ? user.name.trim() : fallbackUserName;
+  const currentUserName = user?.name ? user.name.trim() : (language === "id" ? "Tamu" : "Guest");
 
   const t = useCallback((path, fallbackOrVars = "", vars = null) => {
     if (!path) return "";
@@ -98,8 +167,14 @@ export function WorkspaceProvider({ children }) {
     // Dynamic time-aware greeting
     if (path === "dashboard.greeting") {
       const period = getTimePeriod(currentDate);
-      const name = (variables && variables.user !== undefined) ? variables.user : currentUserName;
       const dict = translations[language] || translations["id"];
+      if (!user || !user.name) {
+        const guestGreeting = dict?.dashboard?.guestGreetings?.[period] || translations["id"]?.dashboard?.guestGreetings?.[period];
+        if (guestGreeting) return guestGreeting;
+        const template = dict?.dashboard?.greetings?.[period] || "";
+        return template.replace(/,?\s*\{user\}!?/g, "!");
+      }
+      const name = (variables && variables.user !== undefined) ? variables.user : currentUserName;
       const greetingTemplate = dict?.dashboard?.greetings?.[period] || translations["id"]?.dashboard?.greetings?.[period] || "";
       return greetingTemplate.replace(/\{user\}/g, String(name));
     }
@@ -123,7 +198,6 @@ export function WorkspaceProvider({ children }) {
 
     let result = found && current !== undefined ? current : null;
     if (result === null) {
-      // Fallback to id dictionary
       let fb = translations["id"] || {};
       let fbFound = true;
       for (const sub of keys) {
@@ -142,64 +216,89 @@ export function WorkspaceProvider({ children }) {
       }
     }
     return result;
-  }, [language, currentDate, currentUserName]);
+  }, [language, currentDate, currentUserName, user]);
 
   const getGreeting = (overrideDate = null, overrideName = null) => {
     const targetDate = overrideDate || currentDate;
     const period = getTimePeriod(targetDate);
+    const dict = translations[language] || translations["id"];
+    if (!user && !overrideName) {
+      return dict?.dashboard?.guestGreetings?.[period] || translations["id"]?.dashboard?.guestGreetings?.[period] || "Selamat siang!";
+    }
     const targetUser = overrideName !== null ? overrideName : currentUserName;
     return t(`dashboard.greetings.${period}`, { user: targetUser });
   };
 
-// Storage key helpers for user-scoped persistence
-function getUserStorageKey(baseKey, userObj) {
-  const userIdentifier = userObj?.email || userObj?.id;
-  if (!userIdentifier) return baseKey;
-  return `${baseKey}_${userIdentifier.trim().toLowerCase().replace(/[^a-z0-9_]/g, "_")}`;
-}
-
-function loadCollection(baseKey, currentUser) {
-  try {
-    const userKey = getUserStorageKey(baseKey, currentUser);
-    const userSaved = localStorage.getItem(userKey);
-    if (userSaved !== null) {
-      const parsed = JSON.parse(userSaved);
-      return Array.isArray(parsed) ? parsed : [];
-    }
-    // Backward compatibility for existing data under baseKey for default user:
-    const isDefaultUser = !currentUser || currentUser.email === "laba@suru.workspace";
-    if (isDefaultUser) {
-      const legacySaved = localStorage.getItem(baseKey);
-      if (legacySaved !== null) {
-        const parsed = JSON.parse(legacySaved);
-        if (Array.isArray(parsed)) {
-          return parsed;
-        }
-      }
-    }
-    return [];
-  } catch {
-    return [];
-  }
-}
-
-  // Load state from localStorage with user scoping, defaulting to empty collections for new users
+  // Load state from localStorage with user scoping, defaulting to empty collections for new visitors
   const [goals, setGoals] = useState(() => loadCollection("ignos_goals", user));
   const [projects, setProjects] = useState(() => loadCollection("ignos_projects", user));
   const [tasks, setTasks] = useState(() => loadCollection("ignos_tasks", user));
   const [notes, setNotes] = useState(() => loadCollection("ignos_notes", user));
   const [activityFeed, setActivityFeed] = useState(() => loadCollection("ignos_activity_feed", user));
 
-  // Reload collections if user email changes (switching accounts)
+  // Reload collections if user changes (logging in, logging out, switching accounts)
   useEffect(() => {
-    if (user?.email) {
-      setGoals(loadCollection("ignos_goals", user));
-      setProjects(loadCollection("ignos_projects", user));
-      setTasks(loadCollection("ignos_tasks", user));
-      setNotes(loadCollection("ignos_notes", user));
-      setActivityFeed(loadCollection("ignos_activity_feed", user));
+    setGoals(loadCollection("ignos_goals", user));
+    setProjects(loadCollection("ignos_projects", user));
+    setTasks(loadCollection("ignos_tasks", user));
+    setNotes(loadCollection("ignos_notes", user));
+    setActivityFeed(loadCollection("ignos_activity_feed", user));
+  }, [user]);
+
+  // Sync Supabase remote data if user is logged in
+  useEffect(() => {
+    if (user?.id && isSupabaseConfigured()) {
+      fetchUserRemoteData(user.id).then((remote) => {
+        if (remote) {
+          if (remote.goals.length > 0) setGoals(remote.goals);
+          if (remote.projects.length > 0) setProjects(remote.projects);
+          if (remote.tasks.length > 0) setTasks(remote.tasks);
+          if (remote.notes.length > 0) setNotes(remote.notes);
+          if (remote.activityFeed.length > 0) setActivityFeed(remote.activityFeed);
+        }
+      });
     }
-  }, [user?.email, user]);
+  }, [user?.id]);
+
+  // Listen to Supabase auth session changes
+  useEffect(() => {
+    if (!isSupabaseConfigured() || !supabase) return;
+
+    supabase.auth.getSession().then(({ data }) => {
+      if (data?.session?.user) {
+        const u = data.session.user;
+        const sessionUser = {
+          id: u.id,
+          email: u.email,
+          name: u.user_metadata?.name || u.user_metadata?.full_name || u.email.split("@")[0],
+          initials: (u.user_metadata?.name || u.email).slice(0, 2).toUpperCase()
+        };
+        setUser(sessionUser);
+        localStorage.setItem("ignos_user", JSON.stringify(sessionUser));
+      }
+    });
+
+    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "SIGNED_IN" && session?.user) {
+        const u = session.user;
+        const sessionUser = {
+          id: u.id,
+          email: u.email,
+          name: u.user_metadata?.name || u.user_metadata?.full_name || u.email.split("@")[0],
+          initials: (u.user_metadata?.name || u.email).slice(0, 2).toUpperCase()
+        };
+        setUser(sessionUser);
+        localStorage.setItem("ignos_user", JSON.stringify(sessionUser));
+      } else if (event === "SIGNED_OUT") {
+        setUser(null);
+        localStorage.removeItem("ignos_user");
+      }
+    });
+
+    return () => {
+      authListener?.subscription?.unsubscribe();
+    };
+  }, []);
 
   // Dynamic "Perlu Perhatian" / "Needs Attention" synchronized with live Projects, Goals, Tasks, and Subtasks
   const needsAttention = useMemo(() => {
@@ -272,45 +371,30 @@ function loadCollection(baseKey, currentUser) {
     projectKey: "ignos"
   });
 
-  // Sync to localStorage with user scoping
+  // Sync to localStorage with user scoping (guest data in ignos_guest_*, account data in user-scoped keys)
   useEffect(() => {
     const key = getUserStorageKey("ignos_goals", user);
     localStorage.setItem(key, JSON.stringify(goals));
-    if (!user || user.email === "laba@suru.workspace") {
-      localStorage.setItem("ignos_goals", JSON.stringify(goals));
-    }
   }, [goals, user]);
 
   useEffect(() => {
     const key = getUserStorageKey("ignos_projects", user);
     localStorage.setItem(key, JSON.stringify(projects));
-    if (!user || user.email === "laba@suru.workspace") {
-      localStorage.setItem("ignos_projects", JSON.stringify(projects));
-    }
   }, [projects, user]);
 
   useEffect(() => {
     const key = getUserStorageKey("ignos_tasks", user);
     localStorage.setItem(key, JSON.stringify(tasks));
-    if (!user || user.email === "laba@suru.workspace") {
-      localStorage.setItem("ignos_tasks", JSON.stringify(tasks));
-    }
   }, [tasks, user]);
 
   useEffect(() => {
     const key = getUserStorageKey("ignos_notes", user);
     localStorage.setItem(key, JSON.stringify(notes));
-    if (!user || user.email === "laba@suru.workspace") {
-      localStorage.setItem("ignos_notes", JSON.stringify(notes));
-    }
   }, [notes, user]);
 
   useEffect(() => {
     const key = getUserStorageKey("ignos_activity_feed", user);
     localStorage.setItem(key, JSON.stringify(activityFeed));
-    if (!user || user.email === "laba@suru.workspace") {
-      localStorage.setItem("ignos_activity_feed", JSON.stringify(activityFeed));
-    }
   }, [activityFeed, user]);
 
   function recalculateProjectMetrics(project, projectTasks) {
@@ -472,8 +556,8 @@ function loadCollection(baseKey, currentUser) {
       subtasks: newTask.subtasks || [],
       activityLog: [
         {
-          author: user.initials || "LB",
-          authorName: currentUserName,
+          author: user?.initials || (language === "id" ? "TM" : "GT"),
+          authorName: user?.name || (language === "id" ? "Tamu" : "Guest"),
           action: language === "id" ? "membuat tugas" : "created task",
           time: language === "id" ? "Baru saja" : "Just now",
           isUser: true
@@ -632,13 +716,6 @@ function loadCollection(baseKey, currentUser) {
     localStorage.setItem(tasksKey, "[]");
     localStorage.setItem(notesKey, "[]");
     localStorage.setItem(activityKey, "[]");
-    if (!user || user.email === "laba@suru.workspace") {
-      localStorage.setItem("ignos_goals", "[]");
-      localStorage.setItem("ignos_projects", "[]");
-      localStorage.setItem("ignos_tasks", "[]");
-      localStorage.setItem("ignos_notes", "[]");
-      localStorage.setItem("ignos_activity_feed", "[]");
-    }
     showToast(language === "id" ? "Semua data workspace telah dikosongkan" : "All workspace data cleared", "info");
   };
 
@@ -658,13 +735,6 @@ function loadCollection(baseKey, currentUser) {
     localStorage.setItem(tasksKey, JSON.stringify(initialTasks));
     localStorage.setItem(notesKey, JSON.stringify(initialNotes));
     localStorage.setItem(activityKey, JSON.stringify(initialActivityFeed));
-    if (!user || user.email === "laba@suru.workspace") {
-      localStorage.setItem("ignos_goals", JSON.stringify(initialGoals));
-      localStorage.setItem("ignos_projects", JSON.stringify(initialProjects));
-      localStorage.setItem("ignos_tasks", JSON.stringify(initialTasks));
-      localStorage.setItem("ignos_notes", JSON.stringify(initialNotes));
-      localStorage.setItem("ignos_activity_feed", JSON.stringify(initialActivityFeed));
-    }
     showToast(language === "id" ? "Data sampel berhasil dimuat ulang" : "Sample data reloaded successfully");
   };
 
@@ -1220,6 +1290,218 @@ function loadCollection(baseKey, currentUser) {
   const streakCount = streakMetrics.currentStreak;
   const bestStreakCount = streakMetrics.bestStreak;
 
+  const login = async (email, password) => {
+    if (isSupabaseConfigured() && supabase) {
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) {
+        return { success: false, error: error.message };
+      }
+      if (data?.user) {
+        const sessionUser = {
+          id: data.user.id,
+          email: data.user.email,
+          name: data.user.user_metadata?.name || data.user.user_metadata?.full_name || data.user.email.split("@")[0],
+          initials: (data.user.user_metadata?.name || data.user.email).slice(0, 2).toUpperCase()
+        };
+        setUser(sessionUser);
+        localStorage.setItem("ignos_user", JSON.stringify(sessionUser));
+        const guestData = checkGuestDataForMigration();
+        if (guestData) setPendingMigrationData(guestData);
+        return { success: true, user: sessionUser };
+      }
+    }
+
+    try {
+      const accountsJson = localStorage.getItem("ignos_local_accounts");
+      const accounts = accountsJson ? JSON.parse(accountsJson) : [];
+      const match = accounts.find((a) => a.email.toLowerCase() === email.toLowerCase());
+      if (!match || match.password !== password) {
+        return { success: false, error: t("auth.invalidCredentials") };
+      }
+      const localUser = {
+        id: match.id,
+        email: match.email,
+        name: match.name,
+        initials: (match.name || match.email).slice(0, 2).toUpperCase()
+      };
+      setUser(localUser);
+      localStorage.setItem("ignos_user", JSON.stringify(localUser));
+      const guestData = checkGuestDataForMigration();
+      if (guestData) setPendingMigrationData(guestData);
+      return { success: true, user: localUser };
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
+  };
+
+  const signUp = async (email, password, name) => {
+    if (isSupabaseConfigured() && supabase) {
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: { name, full_name: name }
+        }
+      });
+      if (error) {
+        return { success: false, error: error.message };
+      }
+      if (data?.user) {
+        const sessionUser = {
+          id: data.user.id,
+          email: data.user.email,
+          name: name || data.user.email.split("@")[0],
+          initials: (name || data.user.email).slice(0, 2).toUpperCase()
+        };
+        setUser(sessionUser);
+        localStorage.setItem("ignos_user", JSON.stringify(sessionUser));
+        const guestData = checkGuestDataForMigration();
+        if (guestData) setPendingMigrationData(guestData);
+        return { success: true, user: sessionUser };
+      }
+    }
+
+    try {
+      const accountsJson = localStorage.getItem("ignos_local_accounts");
+      const accounts = accountsJson ? JSON.parse(accountsJson) : [];
+      if (accounts.some((a) => a.email.toLowerCase() === email.toLowerCase())) {
+        return { success: false, error: language === "id" ? "Email ini sudah terdaftar." : "Email is already registered." };
+      }
+      const newAccount = {
+        id: "loc_" + Date.now(),
+        email,
+        password,
+        name,
+        createdAt: new Date().toISOString()
+      };
+      accounts.push(newAccount);
+      localStorage.setItem("ignos_local_accounts", JSON.stringify(accounts));
+      const localUser = {
+        id: newAccount.id,
+        email: newAccount.email,
+        name: newAccount.name,
+        initials: (newAccount.name || newAccount.email).slice(0, 2).toUpperCase()
+      };
+      setUser(localUser);
+      localStorage.setItem("ignos_user", JSON.stringify(localUser));
+      const guestData = checkGuestDataForMigration();
+      if (guestData) setPendingMigrationData(guestData);
+      return { success: true, user: localUser };
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
+  };
+
+  const loginWithGoogle = async () => {
+    if (!isSupabaseConfigured() || !supabase) {
+      return {
+        success: false,
+        error: t("auth.googleOAuthConfigRequired")
+      };
+    }
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback`
+      }
+    });
+    if (error) {
+      return { success: false, error: error.message };
+    }
+    return { success: true };
+  };
+
+  const resetPassword = async (email) => {
+    if (isSupabaseConfigured() && supabase) {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/login`
+      });
+      if (error) return { success: false, error: error.message };
+      return { success: true };
+    }
+    return { success: true };
+  };
+
+  const logout = async () => {
+    try {
+      if (isSupabaseConfigured() && supabase) {
+        await supabase.auth.signOut();
+      }
+    } catch (e) {
+      console.warn("Error signing out from Supabase:", e);
+    }
+    localStorage.removeItem("ignos_user");
+    setUser(null);
+    setPendingMigrationData(null);
+    setGoals(loadCollection("ignos_goals", null));
+    setProjects(loadCollection("ignos_projects", null));
+    setTasks(loadCollection("ignos_tasks", null));
+    setNotes(loadCollection("ignos_notes", null));
+    setActivityFeed(loadCollection("ignos_activity_feed", null));
+    showToast(t("auth.logoutSuccess"));
+  };
+
+  const executeGuestMigration = async () => {
+    if (!pendingMigrationData || !user) return;
+    try {
+      const res = await runGuestMigration(pendingMigrationData, user.id, {
+        goals,
+        projects,
+        tasks,
+        notes,
+        activityFeed
+      });
+
+      if (res.success) {
+        setGoals(res.mergedData.goals);
+        setProjects(res.mergedData.projects);
+        setTasks(res.mergedData.tasks);
+        setNotes(res.mergedData.notes);
+        setActivityFeed(res.mergedData.activityFeed);
+
+        localStorage.removeItem("ignos_guest_goals");
+        localStorage.removeItem("ignos_guest_projects");
+        localStorage.removeItem("ignos_guest_tasks");
+        localStorage.removeItem("ignos_guest_notes");
+        localStorage.removeItem("ignos_guest_activity_feed");
+
+        setPendingMigrationData(null);
+        showToast(t("auth.migrationSuccess"));
+      } else {
+        showToast(t("auth.migrationFailed"), "error");
+      }
+    } catch (e) {
+      console.error("Guest migration error:", e);
+      showToast(t("auth.migrationFailed"), "error");
+    }
+  };
+
+  const dismissPendingMigration = () => {
+    setPendingMigrationData(null);
+  };
+
+  const reloadUserSession = useCallback(async () => {
+    if (!isSupabaseConfigured() || !supabase) return;
+    try {
+      const { data } = await supabase.auth.getSession();
+      if (data?.session?.user) {
+        const u = data.session.user;
+        const sessionUser = {
+          id: u.id,
+          email: u.email,
+          name: u.user_metadata?.name || u.user_metadata?.full_name || u.email.split("@")[0],
+          initials: (u.user_metadata?.name || u.email).slice(0, 2).toUpperCase()
+        };
+        setUser(sessionUser);
+        localStorage.setItem("ignos_user", JSON.stringify(sessionUser));
+        const guestData = checkGuestDataForMigration();
+        if (guestData) setPendingMigrationData(guestData);
+      }
+    } catch (e) {
+      console.warn("Error reloading user session:", e);
+    }
+  }, [checkGuestDataForMigration]);
+
   const value = {
     language,
     setLanguage,
@@ -1296,6 +1578,17 @@ function loadCollection(baseKey, currentUser) {
     currentDate,
     timePeriod,
     user,
+    isAuthenticated,
+    isGuest,
+    login,
+    signUp,
+    loginWithGoogle,
+    resetPassword,
+    logout,
+    reloadUserSession,
+    pendingMigrationData,
+    executeGuestMigration,
+    dismissPendingMigration,
     updateUser,
     currentUserName,
     getGreeting

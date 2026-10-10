@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useWorkspace } from "../context/WorkspaceContext";
 import { parseAnyDate } from "../utils/attention";
@@ -927,9 +927,24 @@ export function StatisticsPage() {
 }
 
 export function SettingsPage() {
-  const { language, setLanguage, t, user, updateUser, clearAllTasks, resetDefaultTasks } = useWorkspace();
-  const [displayName, setDisplayName] = useState(user?.name || "Laba");
+  const {
+    language,
+    setLanguage,
+    t,
+    user,
+    isAuthenticated,
+    updateUser,
+    clearAllTasks,
+    resetDefaultTasks
+  } = useWorkspace();
+  const [displayName, setDisplayName] = useState(user?.name || "");
   const [toastMessage, setToastMessage] = useState("");
+
+  useEffect(() => {
+    if (user?.name) {
+      setDisplayName(user.name);
+    }
+  }, [user?.name]);
 
   const handleLanguageChange = (newLang) => {
     setLanguage(newLang);
@@ -944,11 +959,13 @@ export function SettingsPage() {
   };
 
   const handleSave = () => {
-    updateUser({ name: displayName });
-    setToastMessage(t("common.savedSuccess"));
-    setTimeout(() => {
-      setToastMessage("");
-    }, 3000);
+    if (isAuthenticated) {
+      updateUser({ name: displayName });
+      setToastMessage(t("common.savedSuccess"));
+      setTimeout(() => {
+        setToastMessage("");
+      }, 3000);
+    }
   };
 
   return (
@@ -1080,28 +1097,85 @@ export function SettingsPage() {
           </div>
         </div>
 
-        {/* User Profile Section */}
+        {/* Profile / Guest Session Section */}
         <div className="pt-space-md border-t border-surface-container">
-          <h3 className="font-headline-md text-headline-md text-on-surface mb-1">
-            {t("settings.profileSection")}
-          </h3>
-          <p className="text-body-sm text-on-surface-variant mb-4">
-            {t("settings.profileDesc")}
-          </p>
-          <div className="max-w-md">
-            <label className="block text-label-md font-semibold text-on-surface mb-1">
-              {t("settings.displayName")}
-            </label>
-            <input
-              type="text"
-              value={displayName}
-              onChange={(e) => setDisplayName(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg bg-surface-container-low text-on-surface text-body-md focus:outline-none focus:ring-1 focus:ring-primary"
-            />
-          </div>
+          {isAuthenticated && user ? (
+            <div>
+              <div className="flex items-center gap-space-sm mb-1">
+                <span className="material-symbols-outlined text-primary text-[22px]">account_circle</span>
+                <h3 className="font-headline-md text-headline-md text-on-surface">
+                  {t("settings.profileSection")}
+                </h3>
+              </div>
+              <p className="text-body-sm text-on-surface-variant mb-4">
+                {t("settings.profileDesc")}
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-space-md max-w-2xl">
+                <div>
+                  <label className="block text-label-md font-semibold text-on-surface mb-1">
+                    {t("settings.displayName")}
+                  </label>
+                  <input
+                    type="text"
+                    value={displayName}
+                    onChange={(e) => setDisplayName(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg bg-surface-container-low text-on-surface text-body-md focus:outline-none focus:ring-1 focus:ring-primary border border-surface-container"
+                  />
+                </div>
+                <div>
+                  <label className="block text-label-md font-semibold text-on-surface mb-1">
+                    {t("auth.emailLabel")}
+                  </label>
+                  <input
+                    type="email"
+                    value={user?.email || ""}
+                    disabled
+                    className="w-full px-3 py-2 rounded-lg bg-surface-container text-on-surface-variant text-body-md opacity-80 cursor-not-allowed border border-surface-container"
+                  />
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="p-space-lg rounded-xl bg-surface-container-low border border-surface-container">
+              <div className="flex items-start gap-space-md">
+                <div className="w-10 h-10 rounded-xl bg-secondary/15 text-secondary flex items-center justify-center flex-shrink-0">
+                  <span className="material-symbols-outlined text-[24px]">devices</span>
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <h3 className="font-headline-sm text-headline-sm font-semibold text-on-surface">
+                      {t("auth.guestBannerTitle")}
+                    </h3>
+                    <span className="px-2 py-0.5 rounded-full bg-secondary/10 text-secondary text-[11px] font-semibold">
+                      {language === "id" ? "Browser Ini" : "This Browser"}
+                    </span>
+                  </div>
+                  <p className="text-body-sm text-on-surface-variant mb-space-md">
+                    {t("auth.guestBannerDesc")}
+                  </p>
+                  <div className="flex flex-wrap items-center gap-space-sm">
+                    <Link
+                      to="/login"
+                      className="px-space-md py-2 rounded-lg bg-primary text-on-primary font-headline-sm text-headline-sm shadow-sm hover:bg-primary-container transition-colors inline-flex items-center gap-1.5 text-sm"
+                    >
+                      <span className="material-symbols-outlined text-[18px]">login</span>
+                      <span>{t("sidebar.login")}</span>
+                    </Link>
+                    <Link
+                      to="/signup"
+                      className="px-space-md py-2 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface font-headline-sm text-headline-sm transition-colors border border-surface-container inline-flex items-center gap-1.5 text-sm"
+                    >
+                      <span className="material-symbols-outlined text-[18px]">person_add</span>
+                      <span>{t("sidebar.signUp")}</span>
+                    </Link>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* Data & Sample Management */}
+        {/* Data & Local Task Management */}
         <div className="pt-space-md border-t border-surface-container">
           <div className="flex items-center gap-space-sm mb-1">
             <span className="material-symbols-outlined text-primary text-[22px]">database</span>
@@ -1132,15 +1206,17 @@ export function SettingsPage() {
           </div>
         </div>
 
-        <div className="pt-space-md border-t border-surface-container flex justify-end">
-          <button
-            type="button"
-            onClick={handleSave}
-            className="px-space-xl py-2 rounded-lg bg-primary text-on-primary font-headline-sm text-headline-sm shadow-sm hover:bg-primary-container transition-colors"
-          >
-            {t("settings.saveChanges")}
-          </button>
-        </div>
+        {isAuthenticated && (
+          <div className="pt-space-md border-t border-surface-container flex justify-end">
+            <button
+              type="button"
+              onClick={handleSave}
+              className="px-space-xl py-2 rounded-lg bg-primary text-on-primary font-headline-sm text-headline-sm shadow-sm hover:bg-primary-container transition-colors"
+            >
+              {t("settings.saveChanges")}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -1148,33 +1224,66 @@ export function SettingsPage() {
 
 export function LogoutPage() {
   const navigate = useNavigate();
-  const { showToast, t } = useWorkspace();
+  const { isGuest, logout, showToast, t } = useWorkspace();
+
+  const handleConfirmLogout = async () => {
+    await logout();
+    showToast(t("auth.logoutSuccess"));
+    navigate("/dashboard");
+  };
+
+  if (isGuest) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-space-xl">
+        <div className="w-16 h-16 rounded-2xl bg-surface-container-low flex items-center justify-center text-primary mb-space-lg shadow-sm">
+          <span className="material-symbols-outlined text-[32px]">person_outline</span>
+        </div>
+        <h2 className="text-headline-lg font-headline-lg text-on-surface mb-2">
+          {t("auth.guestModeLabel")}
+        </h2>
+        <p className="text-body-md font-body-md text-on-surface-variant max-w-md mb-space-xl">
+          {t("auth.guestModeDesc")}
+        </p>
+        <div className="flex items-center gap-space-md">
+          <Link
+            to="/dashboard"
+            className="px-space-xl py-2.5 rounded-lg bg-primary text-on-primary font-headline-sm text-headline-sm shadow-sm hover:bg-primary-container transition-colors"
+          >
+            {t("logout.backBtn")}
+          </Link>
+          <Link
+            to="/login"
+            className="px-space-lg py-2.5 rounded-lg bg-surface-container-low text-on-surface hover:bg-surface-container font-headline-sm text-headline-sm transition-colors cursor-pointer"
+          >
+            {t("sidebar.login")}
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-space-xl">
-      <div className="w-16 h-16 rounded-2xl bg-surface-container-low flex items-center justify-center text-primary mb-space-lg shadow-sm">
+      <div className="w-16 h-16 rounded-2xl bg-surface-container-low flex items-center justify-center text-error mb-space-lg shadow-sm">
         <span className="material-symbols-outlined text-[32px]">logout</span>
       </div>
       <h2 className="text-headline-lg font-headline-lg text-on-surface mb-2">
-        {t("logout.title")}
+        {t("auth.logoutConfirmTitle")}
       </h2>
       <p className="text-body-md font-body-md text-on-surface-variant max-w-md mb-space-xl">
-        {t("logout.desc")}
+        {t("auth.logoutConfirmDesc")}
       </p>
       <div className="flex items-center gap-space-md">
         <Link
           to="/dashboard"
-          className="px-space-xl py-2.5 rounded-lg bg-primary text-on-primary font-headline-sm text-headline-sm shadow-sm hover:bg-primary-container transition-colors"
+          className="px-space-xl py-2.5 rounded-lg bg-surface-container text-on-surface font-headline-sm text-headline-sm hover:bg-surface-container-high transition-colors"
         >
           {t("logout.backBtn")}
         </Link>
         <button
           type="button"
-          onClick={() => {
-            showToast(t("logout.toast"));
-            navigate("/dashboard");
-          }}
-          className="px-space-lg py-2.5 rounded-lg bg-surface-container-low text-on-surface hover:bg-surface-container font-headline-sm text-headline-sm transition-colors cursor-pointer"
+          onClick={handleConfirmLogout}
+          className="px-space-lg py-2.5 rounded-lg bg-error text-white hover:bg-error/90 font-headline-sm text-headline-sm transition-colors cursor-pointer shadow-sm"
         >
           {t("logout.confirmBtn")}
         </button>

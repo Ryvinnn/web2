@@ -1,11 +1,12 @@
 import React from "react";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, Outlet } from "react-router-dom";
 import { WorkspaceProvider, useWorkspace } from "./context/WorkspaceContext";
 import AppSidebar from "./components/common/AppSidebar";
 import AppHeader from "./components/common/AppHeader";
 import CreateModal from "./components/common/CreateModal";
 import ProjectDetailModal from "./components/common/ProjectDetailModal";
 import GlobalSearchModal from "./components/common/GlobalSearchModal";
+import MigrationModal from "./components/common/MigrationModal";
 
 // Primary Pages
 import DashboardPage from "./pages/DashboardPage";
@@ -22,6 +23,11 @@ import {
   SettingsPage,
   LogoutPage
 } from "./pages/SecondaryPages";
+
+// Auth Pages
+import LoginPage from "./pages/LoginPage";
+import SignUpPage from "./pages/SignUpPage";
+import AuthCallbackPage from "./pages/AuthCallbackPage";
 
 function GlobalToast() {
   const { toast } = useWorkspace();
@@ -46,7 +52,7 @@ function GlobalToast() {
   );
 }
 
-function Layout({ children }) {
+function Layout() {
   return (
     <div className="min-h-screen bg-surface font-body-md text-on-surface antialiased flex overflow-x-hidden">
       {/* Persistent Left Sidebar (Responsive Drawer) */}
@@ -59,7 +65,7 @@ function Layout({ children }) {
 
         {/* Dynamic Route View */}
         <main className="w-full mt-16 bg-surface px-space-md sm:px-space-xl py-space-md sm:py-space-xl flex-1 max-w-full">
-          {children}
+          <Outlet />
         </main>
       </div>
 
@@ -67,7 +73,6 @@ function Layout({ children }) {
       <CreateModal />
       <ProjectDetailModal />
       <GlobalSearchModal />
-      <GlobalToast />
     </div>
   );
 }
@@ -76,8 +81,16 @@ export default function App() {
   return (
     <WorkspaceProvider>
       <BrowserRouter>
-        <Layout>
-          <Routes>
+        <MigrationModal />
+        <GlobalToast />
+        <Routes>
+          {/* Standalone Authentication Pages */}
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/signup" element={<SignUpPage />} />
+          <Route path="/auth/callback" element={<AuthCallbackPage />} />
+
+          {/* Main App Workspace Layout */}
+          <Route element={<Layout />}>
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
             <Route path="/dashboard" element={<DashboardPage />} />
             <Route path="/goals" element={<GoalsPage />} />
@@ -90,8 +103,8 @@ export default function App() {
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/logout" element={<LogoutPage />} />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
-          </Routes>
-        </Layout>
+          </Route>
+        </Routes>
       </BrowserRouter>
     </WorkspaceProvider>
   );
