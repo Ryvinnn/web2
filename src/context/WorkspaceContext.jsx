@@ -17,6 +17,10 @@ import {
 import { supabase, isSupabaseConfigured } from "../utils/supabaseClient";
 import {
   fetchUserRemoteData,
+  syncEntityToRemote,
+  deleteEntityFromRemote,
+  debouncedSyncEntityToRemote,
+  isUuid,
   migrateGuestData as runGuestMigration
 } from "../utils/dataSync";
 
@@ -99,6 +103,12 @@ export function WorkspaceProvider({ children }) {
 
   const isAuthenticated = Boolean(user && (user.id || user.email));
   const isGuest = !isAuthenticated;
+  const isCloudUser = Boolean(
+    isSupabaseConfigured() &&
+    supabase &&
+    user?.id &&
+    isUuid(user.id)
+  );
 
   // Pending migration state if local guest data was detected upon login/signup
   const [pendingMigrationData, setPendingMigrationData] = useState(null);
@@ -278,26 +288,119 @@ export function WorkspaceProvider({ children }) {
     setActivityFeed(loadCollection("ignos_activity_feed", currentUserId));
   }, [currentUserId]);
 
+  const isFetchingRemoteRef = useRef(false);
+  const lastSyncTimestampRef = useRef(0);
+
+  const loadAndSyncRemoteData = useCallback(async (targetUserId, force = false) => {
+    if (!targetUserId || !isUuid(targetUserId) || !isSupabaseConfigured() || !supabase) {
+      return;
+    }
+
+    const now = Date.now();
+    if (!force && now - lastSyncTimestampRef.current < 4000) {
+      return;
+    }
+    if (isFetchingRemoteRef.current) return;
+    isFetchingRemoteRef.current = true;
+    lastSyncTimestampRef.current = now;
+
+    try {
+      const remote = await fetchUserRemoteData(targetUserId);
+      if (!remote) return;
+
+      if (remote.error) {
+        console.warn("[WorkspaceContext] Partial remote data fetch warning:", remote.error);
+      }
+
+      // Read current local storage for this user to reconcile
+      const localGoals = loadCollection("ignos_goals", targetUserId);
+      const localProjects = loadCollection("ignos_projects", targetUserId);
+      const localTasks = loadCollection("ignos_tasks", targetUserId);
+      const localNotes = loadCollection("ignos_notes", targetUserId);
+      const localActivity = loadCollection("ignos_activity_feed", targetUserId);
+
+      // Reconciler helper: merges remote and rescues any unsynced local items
+      const reconcile = (tableName, remoteList = [], localList = []) => {
+        const remoteMap = new Map();
+        remoteList.forEach((item) => {
+          if (item?.id) remoteMap.set(String(item.id), item);
+        });
+
+        const merged = [...remoteList];
+        const unsyncedToPush = [];
+
+        for (const lItem of localList) {
+          if (!lItem?.id) continue;
+          const idKey = String(lItem.id);
+          if (!remoteMap.has(idKey)) {
+            // If item has not been synced to cloud yet (or created before cloud sync was active), rescue it!
+            if (!lItem._synced) {
+              const rescued = { ...lItem, _synced: true };
+              merged.push(rescued);
+              unsyncedToPush.push(rescued);
+            }
+          }
+        }
+
+        // Fire off background sync for rescued unsynced items
+        if (unsyncedToPush.length > 0) {
+          for (const item of unsyncedToPush) {
+            syncEntityToRemote(tableName, item, targetUserId).catch((err) => {
+              console.warn(`[WorkspaceContext] Auto-sync rescue failed for ${tableName}:`, err);
+            });
+          }
+        }
+
+        return merged;
+      };
+
+      if (!remote.tableErrors?.goals) {
+        setGoals(reconcile("goals", remote.goals, localGoals));
+      }
+      if (!remote.tableErrors?.projects) {
+        setProjects(reconcile("projects", remote.projects, localProjects));
+      }
+      if (!remote.tableErrors?.tasks) {
+        setTasks(reconcile("tasks", remote.tasks, localTasks));
+      }
+      if (!remote.tableErrors?.notes) {
+        setNotes(reconcile("notes", remote.notes, localNotes));
+      }
+      if (!remote.tableErrors?.activityFeed) {
+        setActivityFeed(reconcile("activity_feed", remote.activityFeed, localActivity));
+      }
+    } catch (err) {
+      console.error("[WorkspaceContext] Failed to load & sync remote data:", err);
+    } finally {
+      isFetchingRemoteRef.current = false;
+    }
+  }, []);
+
   // Sync Supabase remote data if user is logged in (guarded to run once per unique session user ID)
   const lastFetchedUserIdRef = useRef(null);
   useEffect(() => {
-    if (user?.id && isSupabaseConfigured()) {
+    if (user?.id && isUuid(user.id) && isSupabaseConfigured()) {
       if (lastFetchedUserIdRef.current === user.id) return;
       lastFetchedUserIdRef.current = user.id;
-
-      fetchUserRemoteData(user.id).then((remote) => {
-        if (remote) {
-          if (remote.goals.length > 0) setGoals(remote.goals);
-          if (remote.projects.length > 0) setProjects(remote.projects);
-          if (remote.tasks.length > 0) setTasks(remote.tasks);
-          if (remote.notes.length > 0) setNotes(remote.notes);
-          if (remote.activityFeed.length > 0) setActivityFeed(remote.activityFeed);
-        }
-      });
+      loadAndSyncRemoteData(user.id, true);
     } else if (!user?.id) {
       lastFetchedUserIdRef.current = null;
     }
-  }, [user?.id]);
+  }, [user?.id, loadAndSyncRemoteData]);
+
+  // Window focus auto-refresh (throttled to 15 seconds) to catch cross-device updates
+  useEffect(() => {
+    const handleWindowFocus = () => {
+      if (user?.id && isUuid(user.id) && isSupabaseConfigured()) {
+        const elapsed = Date.now() - lastSyncTimestampRef.current;
+        if (elapsed > 15000) {
+          loadAndSyncRemoteData(user.id, false);
+        }
+      }
+    };
+    window.addEventListener("focus", handleWindowFocus);
+    return () => window.removeEventListener("focus", handleWindowFocus);
+  }, [user?.id, loadAndSyncRemoteData]);
 
   // Listen to Supabase auth session changes cleanly without redundant state updates
   useEffect(() => {
@@ -461,22 +564,30 @@ export function WorkspaceProvider({ children }) {
   const toggleTask = (taskId) => {
     let affectedProjectId = null;
     const todayISO = formatLocalDateToISO(currentDate);
+    let updatedTask = null;
 
     const nextTasks = tasks.map((t) => {
       if (t.id === taskId) {
         const nextCompleted = !t.completed;
         affectedProjectId = t.projectId || t.project;
-        return {
+        updatedTask = {
           ...t,
           completed: nextCompleted,
           completedAt: nextCompleted ? (t.completedAt || todayISO) : null,
           timeTag: nextCompleted ? (language === "id" ? "Baru Selesai" : "Completed Just Now") : t.timeTag
         };
+        return updatedTask;
       }
       return t;
     });
 
     setTasks(nextTasks);
+
+    if (isCloudUser && updatedTask) {
+      syncEntityToRemote("tasks", updatedTask, user.id).catch((err) => {
+        console.warn("[WorkspaceContext] Failed to sync toggled task:", err);
+      });
+    }
 
     if (affectedProjectId) {
       setProjects((prev) =>
@@ -490,7 +601,13 @@ export function WorkspaceProvider({ children }) {
             const pTasks = nextTasks.filter(
               (t) => t.projectId === p.id || (p.key && t.projectId === p.key) || t.project === p.title
             );
-            return recalculateProjectMetrics(p, pTasks);
+            const recalculated = recalculateProjectMetrics(p, pTasks);
+            if (isCloudUser) {
+              syncEntityToRemote("projects", recalculated, user.id).catch((err) => {
+                console.warn("[WorkspaceContext] Failed to sync recalculated project:", err);
+              });
+            }
+            return recalculated;
           }
           return p;
         })
@@ -499,20 +616,27 @@ export function WorkspaceProvider({ children }) {
 
     const targetTask = tasks.find((t) => t.id === taskId);
     if (targetTask && !targetTask.completed) {
-      setActivityFeed((prev) => [
-        {
-          id: "act-" + Date.now(),
-          typeKey: "taskCompleted",
-          itemTitle: targetTask.title,
-          type: language === "id" ? "Tugas Selesai" : "Task Completed",
-          description: language === "id" ? `Menyelesaikan tugas: "${targetTask.title}"` : `Completed task: "${targetTask.title}"`,
-          time: language === "id" ? "Baru saja" : "Just now",
-          date: todayISO,
-          color: "bg-primary"
-        },
-        ...prev
-      ]);
+      const actItem = {
+        id: "act-" + Date.now(),
+        typeKey: "taskCompleted",
+        itemTitle: targetTask.title,
+        type: language === "id" ? "Tugas Selesai" : "Task Completed",
+        description: language === "id" ? `Menyelesaikan tugas: "${targetTask.title}"` : `Completed task: "${targetTask.title}"`,
+        time: language === "id" ? "Baru saja" : "Just now",
+        date: todayISO,
+        color: "bg-primary"
+      };
+      if (isCloudUser) {
+        syncEntityToRemote("activity_feed", actItem, user.id).catch(console.warn);
+      }
+      setActivityFeed((prev) => [actItem, ...prev]);
     } else if (targetTask && targetTask.completed) {
+      if (isCloudUser) {
+        const actToRemove = activityFeed.find((a) => a.typeKey === "taskCompleted" && a.itemTitle === targetTask.title);
+        if (actToRemove?.id) {
+          deleteEntityFromRemote("activity_feed", actToRemove.id, user.id).catch(console.warn);
+        }
+      }
       setActivityFeed((prev) =>
         prev.filter((a) => !(a.typeKey === "taskCompleted" && a.itemTitle === targetTask.title))
       );
@@ -522,43 +646,59 @@ export function WorkspaceProvider({ children }) {
   const toggleAllTasks = () => {
     const todayISO = formatLocalDateToISO(currentDate);
     let nextCompletedState = false;
+    const changedTasks = [];
     setTasks((prev) => {
       const allTodayChecked = prev.filter((t) => t.status === "today").every((t) => t.completed);
       const nextCompleted = !allTodayChecked;
       nextCompletedState = nextCompleted;
       return prev.map((t) => {
         if (t.status === "today") {
-          return {
+          const updated = {
             ...t,
             completed: nextCompleted,
             completedAt: nextCompleted ? todayISO : null
           };
+          changedTasks.push(updated);
+          return updated;
         }
         return t;
       });
     });
 
+    if (isCloudUser && changedTasks.length > 0) {
+      for (const t of changedTasks) {
+        syncEntityToRemote("tasks", t, user.id).catch(console.warn);
+      }
+    }
+
     if (nextCompletedState) {
-      setActivityFeed((prev) => [
-        {
-          id: "act-" + Date.now(),
-          typeKey: "allTasksCompleted",
-          itemTitle: language === "id" ? "Semua Tugas Hari Ini" : "All Today Tasks",
-          type: language === "id" ? "Checklist Hari Ini Selesai" : "Today's Checklist Completed",
-          description: language === "id" ? "Menandai seluruh tugas hari ini selesai." : "Marked all today's tasks as completed.",
-          time: language === "id" ? "Baru saja" : "Just now",
-          date: todayISO,
-          color: "bg-primary"
-        },
-        ...prev
-      ]);
+      const actItem = {
+        id: "act-" + Date.now(),
+        typeKey: "allTasksCompleted",
+        itemTitle: language === "id" ? "Semua Tugas Hari Ini" : "All Today Tasks",
+        type: language === "id" ? "Checklist Hari Ini Selesai" : "Today's Checklist Completed",
+        description: language === "id" ? "Menandai seluruh tugas hari ini selesai." : "Marked all today's tasks as completed.",
+        time: language === "id" ? "Baru saja" : "Just now",
+        date: todayISO,
+        color: "bg-primary"
+      };
+      if (isCloudUser) {
+        syncEntityToRemote("activity_feed", actItem, user.id).catch(console.warn);
+      }
+      setActivityFeed((prev) => [actItem, ...prev]);
     } else {
+      if (isCloudUser) {
+        const actToRemove = activityFeed.find((a) => a.typeKey === "allTasksCompleted");
+        if (actToRemove?.id) {
+          deleteEntityFromRemote("activity_feed", actToRemove.id, user.id).catch(console.warn);
+        }
+      }
       setActivityFeed((prev) => prev.filter((a) => a.typeKey !== "allTasksCompleted"));
     }
     showToast(t("dashboard.todayChecklistTitle"));
   };
 
-  const addTask = (newTask) => {
+  const addTask = async (newTask) => {
     const todayISO = formatLocalDateToISO(currentDate);
     const item = {
       id: "t-" + Date.now(),
@@ -578,6 +718,7 @@ export function WorkspaceProvider({ children }) {
       completedAt: null,
       tag: newTask.tag || "Baru",
       subtasks: newTask.subtasks || [],
+      _synced: false,
       activityLog: [
         {
           author: user?.initials || (language === "id" ? "TM" : "GT"),
@@ -588,8 +729,29 @@ export function WorkspaceProvider({ children }) {
         }
       ]
     };
+
+    let syncError = null;
+    if (isCloudUser) {
+      const res = await syncEntityToRemote("tasks", item, user.id);
+      if (!res.success) {
+        syncError = res.error;
+        item._synced = false;
+      } else {
+        item._synced = true;
+      }
+    }
+
     const nextTasks = [item, ...tasks];
     setTasks(nextTasks);
+
+    if (syncError) {
+      showToast(
+        language === "id"
+          ? `Tersimpan secara lokal. Gagal sinkron ke cloud: ${syncError}`
+          : `Saved locally. Failed to sync to cloud: ${syncError}`,
+        "error"
+      );
+    }
 
     // Synchronize affected project
     const matchedProjectId = item.projectId || item.project;
@@ -605,7 +767,11 @@ export function WorkspaceProvider({ children }) {
             const pTasks = nextTasks.filter(
               (t) => t.projectId === p.id || (p.key && t.projectId === p.key) || t.project === p.title
             );
-            return recalculateProjectMetrics(p, pTasks);
+            const recalculated = recalculateProjectMetrics(p, pTasks);
+            if (isCloudUser) {
+              syncEntityToRemote("projects", recalculated, user.id).catch(console.warn);
+            }
+            return recalculated;
           }
           return p;
         })
@@ -613,19 +779,21 @@ export function WorkspaceProvider({ children }) {
     }
 
     // Add activity
-    setActivityFeed((prev) => [
-      {
-        id: "act-" + Date.now(),
-        typeKey: "taskCreated",
-        itemTitle: newTask.title,
-        type: language === "id" ? "Tugas Baru" : "New Task",
-        description: language === "id" ? `Menambahkan tugas: "${newTask.title}"` : `Added task: "${newTask.title}"`,
-        time: language === "id" ? "Baru saja" : "Just now",
-        date: todayISO,
-        color: "bg-primary"
-      },
-      ...prev
-    ]);
+    const actItem = {
+      id: "act-" + Date.now(),
+      typeKey: "taskCreated",
+      itemTitle: newTask.title,
+      type: language === "id" ? "Tugas Baru" : "New Task",
+      description: language === "id" ? `Menambahkan tugas: "${newTask.title}"` : `Added task: "${newTask.title}"`,
+      time: language === "id" ? "Baru saja" : "Just now",
+      date: todayISO,
+      color: "bg-primary"
+    };
+
+    if (isCloudUser) {
+      syncEntityToRemote("activity_feed", actItem, user.id).catch(console.warn);
+    }
+    setActivityFeed((prev) => [actItem, ...prev]);
 
     showToast(language === "id" ? `✓ Tugas "${newTask.title}" berhasil dibuat!` : `✓ Task "${newTask.title}" created successfully!`);
     return item;
@@ -635,35 +803,54 @@ export function WorkspaceProvider({ children }) {
     const todayISO = formatLocalDateToISO(currentDate);
     const targetTask = tasks.find((t) => t.id === taskId);
     if (targetTask && updates.completed === true && !targetTask.completed) {
-      setActivityFeed((prev) => [
-        {
-          id: "act-" + Date.now(),
-          typeKey: "taskCompleted",
-          itemTitle: updates.title || targetTask.title,
-          type: language === "id" ? "Tugas Selesai" : "Task Completed",
-          description: language === "id" ? `Menyelesaikan tugas: "${updates.title || targetTask.title}"` : `Completed task: "${updates.title || targetTask.title}"`,
-          time: language === "id" ? "Baru saja" : "Just now",
-          date: todayISO,
-          color: "bg-primary"
-        },
-        ...prev
-      ]);
+      const actItem = {
+        id: "act-" + Date.now(),
+        typeKey: "taskCompleted",
+        itemTitle: updates.title || targetTask.title,
+        type: language === "id" ? "Tugas Selesai" : "Task Completed",
+        description: language === "id" ? `Menyelesaikan tugas: "${updates.title || targetTask.title}"` : `Completed task: "${updates.title || targetTask.title}"`,
+        time: language === "id" ? "Baru saja" : "Just now",
+        date: todayISO,
+        color: "bg-primary"
+      };
+      if (isCloudUser) {
+        syncEntityToRemote("activity_feed", actItem, user.id).catch(console.warn);
+      }
+      setActivityFeed((prev) => [actItem, ...prev]);
     } else if (targetTask && updates.completed === false && targetTask.completed) {
+      if (isCloudUser) {
+        const actToRemove = activityFeed.find((a) => a.typeKey === "taskCompleted" && a.itemTitle === targetTask.title);
+        if (actToRemove?.id) {
+          deleteEntityFromRemote("activity_feed", actToRemove.id, user.id).catch(console.warn);
+        }
+      }
       setActivityFeed((prev) =>
         prev.filter((a) => !(a.typeKey === "taskCompleted" && a.itemTitle === targetTask.title))
       );
     }
+
+    let updatedTask = null;
     const nextTasks = tasks.map((t) => {
       if (t.id === taskId) {
         const merged = { ...t, ...updates };
         if (updates.completed !== undefined) {
           merged.completedAt = updates.completed ? (updates.completedAt || t.completedAt || todayISO) : null;
         }
+        updatedTask = merged;
         return merged;
       }
       return t;
     });
     setTasks(nextTasks);
+
+    if (isCloudUser && updatedTask) {
+      debouncedSyncEntityToRemote("tasks", updatedTask, user.id, 400, (err) => {
+        showToast(
+          language === "id" ? `Gagal menyinkronkan tugas: ${err}` : `Failed to sync task: ${err}`,
+          "error"
+        );
+      });
+    }
 
     const affectedProjectId = targetTask?.projectId || targetTask?.project;
     if (affectedProjectId) {
@@ -678,7 +865,11 @@ export function WorkspaceProvider({ children }) {
             const pTasks = nextTasks.filter(
               (t) => t.projectId === p.id || (p.key && t.projectId === p.key) || t.project === p.title
             );
-            return recalculateProjectMetrics(p, pTasks);
+            const recalculated = recalculateProjectMetrics(p, pTasks);
+            if (isCloudUser) {
+              debouncedSyncEntityToRemote("projects", recalculated, user.id, 400);
+            }
+            return recalculated;
           }
           return p;
         })
@@ -688,8 +879,19 @@ export function WorkspaceProvider({ children }) {
     showToast(language === "id" ? "✓ Tugas berhasil diperbarui!" : "✓ Task updated successfully!");
   };
 
-  const deleteTask = (taskId) => {
+  const deleteTask = async (taskId) => {
     const target = tasks.find((t) => t.id === taskId);
+    if (isCloudUser) {
+      const res = await deleteEntityFromRemote("tasks", taskId, user.id);
+      if (!res.success) {
+        showToast(
+          language === "id" ? `Gagal menghapus tugas dari cloud: ${res.error}` : `Failed to delete task from cloud: ${res.error}`,
+          "error"
+        );
+        return false;
+      }
+    }
+
     const nextTasks = tasks.filter((t) => t.id !== taskId);
     setTasks(nextTasks);
     if (selectedTaskId === taskId) {
@@ -710,7 +912,11 @@ export function WorkspaceProvider({ children }) {
               const pTasks = nextTasks.filter(
                 (t) => t.projectId === p.id || (p.key && t.projectId === p.key) || t.project === p.title
               );
-              return recalculateProjectMetrics(p, pTasks);
+              const recalculated = recalculateProjectMetrics(p, pTasks);
+              if (isCloudUser) {
+                syncEntityToRemote("projects", recalculated, user.id).catch(console.warn);
+              }
+              return recalculated;
             }
             return p;
           })
@@ -719,12 +925,29 @@ export function WorkspaceProvider({ children }) {
     }
 
     if (target?.title) {
+      if (isCloudUser) {
+        const actToRemove = activityFeed.find((a) => a.itemTitle === target.title);
+        if (actToRemove?.id) {
+          deleteEntityFromRemote("activity_feed", actToRemove.id, user.id).catch(console.warn);
+        }
+      }
       setActivityFeed((prev) => prev.filter((a) => a.itemTitle !== target.title));
     }
     showToast(language === "id" ? `✓ Tugas "${target?.title || ''}" telah dihapus` : `✓ Task "${target?.title || ''}" deleted`, "info");
+    return true;
   };
 
-  const clearAllTasks = () => {
+  const clearAllTasks = async () => {
+    if (isCloudUser) {
+      await Promise.allSettled([
+        supabase.from("tasks").delete().eq("user_id", user.id),
+        supabase.from("projects").delete().eq("user_id", user.id),
+        supabase.from("goals").delete().eq("user_id", user.id),
+        supabase.from("notes").delete().eq("user_id", user.id),
+        supabase.from("activity_feed").delete().eq("user_id", user.id)
+      ]);
+    }
+
     setTasks([]);
     setGoals([]);
     setProjects([]);
@@ -763,64 +986,91 @@ export function WorkspaceProvider({ children }) {
   };
 
   const rescheduleOverdueTasks = () => {
+    const updatedOverdue = [];
     setTasks((prev) =>
-      prev.map((t) =>
-        t.status === "overdue"
-          ? { ...t, status: "today", timeTag: "Dijadwalkan Ulang (Hari ini)" }
-          : t
-      )
+      prev.map((t) => {
+        if (t.status === "overdue") {
+          const updated = { ...t, status: "today", timeTag: "Dijadwalkan Ulang (Hari ini)" };
+          updatedOverdue.push(updated);
+          return updated;
+        }
+        return t;
+      })
     );
+    if (isCloudUser && updatedOverdue.length > 0) {
+      for (const t of updatedOverdue) {
+        syncEntityToRemote("tasks", t, user.id).catch(console.warn);
+      }
+    }
     showToast(language === "id" ? "✓ Semua tugas terlewat berhasil dijadwalkan ulang ke Hari Ini!" : "✓ All overdue tasks rescheduled to Today!");
   };
 
   const toggleSubtask = (taskId, subtaskId) => {
+    let updatedTask = null;
     setTasks((prev) =>
       prev.map((t) => {
         if (t.id === taskId && t.subtasks) {
           const updatedSubtasks = t.subtasks.map((st) =>
             st.id === subtaskId ? { ...st, completed: !st.completed } : st
           );
-          return { ...t, subtasks: updatedSubtasks };
+          const updated = { ...t, subtasks: updatedSubtasks };
+          updatedTask = updated;
+          return updated;
         }
         return t;
       })
     );
+    if (isCloudUser && updatedTask) {
+      syncEntityToRemote("tasks", updatedTask, user.id).catch(console.warn);
+    }
   };
 
   const addSubtask = (taskId, title) => {
+    let updatedTask = null;
     setTasks((prev) =>
       prev.map((t) => {
         if (t.id === taskId) {
           const subtasks = t.subtasks || [];
-          return {
+          const updated = {
             ...t,
             subtasks: [
               ...subtasks,
               { id: "st-" + Date.now(), title, completed: false }
             ]
           };
+          updatedTask = updated;
+          return updated;
         }
         return t;
       })
     );
+    if (isCloudUser && updatedTask) {
+      syncEntityToRemote("tasks", updatedTask, user.id).catch(console.warn);
+    }
   };
 
   const deleteSubtask = (taskId, subtaskId) => {
+    let updatedTask = null;
     setTasks((prev) =>
       prev.map((t) => {
         if (t.id === taskId && Array.isArray(t.subtasks)) {
-          return {
+          const updated = {
             ...t,
             subtasks: t.subtasks.filter((st) => st.id !== subtaskId)
           };
+          updatedTask = updated;
+          return updated;
         }
         return t;
       })
     );
+    if (isCloudUser && updatedTask) {
+      syncEntityToRemote("tasks", updatedTask, user.id).catch(console.warn);
+    }
   };
 
   // Goal actions
-  const addGoal = (newGoal) => {
+  const addGoal = async (newGoal) => {
     const item = {
       id: "g-" + Date.now(),
       key: newGoal.title.toLowerCase().replace(/[^a-z0-9]/g, "-"),
@@ -840,44 +1090,103 @@ export function WorkspaceProvider({ children }) {
       deadlineFormatted: newGoal.deadlineFormatted || formatLocalDateLong(currentDate, language),
       status: newGoal.status || "in_progress",
       progress: newGoal.progress || 0,
-      milestones: newGoal.milestones || []
+      milestones: newGoal.milestones || [],
+      _synced: false
     };
+
+    let syncError = null;
+    if (isCloudUser) {
+      const res = await syncEntityToRemote("goals", item, user.id);
+      if (!res.success) {
+        syncError = res.error;
+        item._synced = false;
+      } else {
+        item._synced = true;
+      }
+    }
+
     setGoals((prev) => [item, ...prev]);
 
-    setActivityFeed((prev) => [
-      {
-        id: "act-" + Date.now(),
-        typeKey: "goalCreated",
-        itemTitle: newGoal.title,
-        type: language === "id" ? "Target Baru" : "New Goal",
-        description: language === "id" ? `Target dibuat: "${newGoal.title}"` : `Goal created: "${newGoal.title}"`,
-        time: language === "id" ? "Baru saja" : "Just now",
-        date: formatLocalDateToISO(currentDate),
-        color: "bg-tertiary"
-      },
-      ...prev
-    ]);
+    if (syncError) {
+      showToast(
+        language === "id"
+          ? `Tersimpan secara lokal. Gagal sinkron ke cloud: ${syncError}`
+          : `Saved locally. Failed to sync to cloud: ${syncError}`,
+        "error"
+      );
+    }
+
+    const actItem = {
+      id: "act-" + Date.now(),
+      typeKey: "goalCreated",
+      itemTitle: newGoal.title,
+      type: language === "id" ? "Target Baru" : "New Goal",
+      description: language === "id" ? `Target dibuat: "${newGoal.title}"` : `Goal created: "${newGoal.title}"`,
+      time: language === "id" ? "Baru saja" : "Just now",
+      date: formatLocalDateToISO(currentDate),
+      color: "bg-tertiary"
+    };
+
+    if (isCloudUser) {
+      syncEntityToRemote("activity_feed", actItem, user.id).catch(console.warn);
+    }
+    setActivityFeed((prev) => [actItem, ...prev]);
 
     showToast(language === "id" ? `✓ Target "${newGoal.title}" berhasil dibuat!` : `✓ Goal "${newGoal.title}" created successfully!`);
+    return item;
   };
 
   const updateGoal = (goalId, updates) => {
+    let updatedGoal = null;
     setGoals((prev) =>
-      prev.map((g) => (g.id === goalId ? { ...g, ...updates } : g))
+      prev.map((g) => {
+        if (g.id === goalId) {
+          const merged = { ...g, ...updates };
+          updatedGoal = merged;
+          return merged;
+        }
+        return g;
+      })
     );
+
+    if (isCloudUser && updatedGoal) {
+      debouncedSyncEntityToRemote("goals", updatedGoal, user.id, 400, (err) => {
+        showToast(language === "id" ? `Gagal memperbarui target: ${err}` : `Failed to update goal: ${err}`, "error");
+      });
+    }
+
     showToast(language === "id" ? "✓ Target berhasil diperbarui!" : "✓ Goal updated successfully!");
   };
 
-  const deleteGoal = (goalId) => {
+  const deleteGoal = async (goalId) => {
     const target = goals.find((g) => g.id === goalId);
+    if (isCloudUser) {
+      const res = await deleteEntityFromRemote("goals", goalId, user.id);
+      if (!res.success) {
+        showToast(
+          language === "id" ? `Gagal menghapus target dari cloud: ${res.error}` : `Failed to delete goal from cloud: ${res.error}`,
+          "error"
+        );
+        return false;
+      }
+    }
+
     setGoals((prev) => prev.filter((g) => g.id !== goalId));
     if (target?.title) {
+      if (isCloudUser) {
+        const actToRemove = activityFeed.find((a) => a.itemTitle === target.title);
+        if (actToRemove?.id) {
+          deleteEntityFromRemote("activity_feed", actToRemove.id, user.id).catch(console.warn);
+        }
+      }
       setActivityFeed((prev) => prev.filter((a) => a.itemTitle !== target.title));
     }
     showToast(language === "id" ? `✓ Target "${target?.title || ''}" telah dihapus` : `✓ Goal "${target?.title || ''}" deleted`, "info");
+    return true;
   };
 
   const toggleMilestone = (goalId, milestoneId) => {
+    let updatedGoal = null;
     setGoals((prev) =>
       prev.map((g) => {
         if (g.id === goalId && g.milestones) {
@@ -900,19 +1209,20 @@ export function WorkspaceProvider({ children }) {
             return m;
           });
           if (newlyCompletedMilestone) {
-            setActivityFeed((prevFeed) => [
-              {
-                id: "act-" + Date.now(),
-                typeKey: "milestoneCompleted",
-                itemTitle: newlyCompletedMilestone.title,
-                type: language === "id" ? "Milestone Tercapai" : "Milestone Achieved",
-                description: language === "id" ? `Langkah milestone tercapai: "${newlyCompletedMilestone.title}"` : `Milestone step achieved: "${newlyCompletedMilestone.title}"`,
-                time: language === "id" ? "Baru saja" : "Just now",
-                date: formatLocalDateToISO(currentDate),
-                color: "bg-tertiary"
-              },
-              ...prevFeed
-            ]);
+            const actItem = {
+              id: "act-" + Date.now(),
+              typeKey: "milestoneCompleted",
+              itemTitle: newlyCompletedMilestone.title,
+              type: language === "id" ? "Milestone Tercapai" : "Milestone Achieved",
+              description: language === "id" ? `Langkah milestone tercapai: "${newlyCompletedMilestone.title}"` : `Milestone step achieved: "${newlyCompletedMilestone.title}"`,
+              time: language === "id" ? "Baru saja" : "Just now",
+              date: formatLocalDateToISO(currentDate),
+              color: "bg-tertiary"
+            };
+            if (isCloudUser) {
+              syncEntityToRemote("activity_feed", actItem, user.id).catch(console.warn);
+            }
+            setActivityFeed((prevFeed) => [actItem, ...prevFeed]);
           } else if (uncheckedMilestone) {
             setActivityFeed((prevFeed) =>
               prevFeed.filter((a) => !(a.typeKey === "milestoneCompleted" && a.itemTitle === uncheckedMilestone.title))
@@ -920,19 +1230,25 @@ export function WorkspaceProvider({ children }) {
           }
           const completedCount = updatedMilestones.filter((m) => m.completed).length;
           const newProgress = Math.round((completedCount / updatedMilestones.length) * 100);
-          return {
+          const goalUpdated = {
             ...g,
             milestones: updatedMilestones,
             progress: newProgress,
             status: newProgress === 100 ? "completed" : "in_progress"
           };
+          updatedGoal = goalUpdated;
+          return goalUpdated;
         }
         return g;
       })
     );
+    if (isCloudUser && updatedGoal) {
+      syncEntityToRemote("goals", updatedGoal, user.id).catch(console.warn);
+    }
   };
 
   const addGoalMilestone = (goalId, title) => {
+    let updatedGoal = null;
     setGoals((prev) =>
       prev.map((g) => {
         if (g.id === goalId) {
@@ -943,41 +1259,52 @@ export function WorkspaceProvider({ children }) {
           ];
           const completedCount = updated.filter((m) => m.completed).length;
           const newProgress = Math.round((completedCount / updated.length) * 100);
-          return {
+          const goalUpdated = {
             ...g,
             milestones: updated,
             progress: newProgress,
             status: newProgress === 100 ? "completed" : "in_progress"
           };
+          updatedGoal = goalUpdated;
+          return goalUpdated;
         }
         return g;
       })
     );
+    if (isCloudUser && updatedGoal) {
+      syncEntityToRemote("goals", updatedGoal, user.id).catch(console.warn);
+    }
     showToast(language === "id" ? "✓ Langkah milestone berhasil ditambahkan!" : "✓ Milestone step added!");
   };
 
   const deleteGoalMilestone = (goalId, milestoneId) => {
+    let updatedGoal = null;
     setGoals((prev) =>
       prev.map((g) => {
         if (g.id === goalId && Array.isArray(g.milestones)) {
           const updated = g.milestones.filter((m) => m.id !== milestoneId);
           const completedCount = updated.filter((m) => m.completed).length;
           const newProgress = updated.length > 0 ? Math.round((completedCount / updated.length) * 100) : 0;
-          return {
+          const goalUpdated = {
             ...g,
             milestones: updated,
             progress: newProgress,
             status: newProgress === 100 ? "completed" : "in_progress"
           };
+          updatedGoal = goalUpdated;
+          return goalUpdated;
         }
         return g;
       })
     );
+    if (isCloudUser && updatedGoal) {
+      syncEntityToRemote("goals", updatedGoal, user.id).catch(console.warn);
+    }
     showToast(language === "id" ? "✓ Milestone berhasil dihapus" : "✓ Milestone deleted", "info");
   };
 
   // Project actions
-  const addProject = (newProject) => {
+  const addProject = async (newProject) => {
     const milestones = Array.isArray(newProject.milestones) ? newProject.milestones : [];
     const totalMilestones = milestones.length;
     const completedMilestones = milestones.filter((m) => m.completed).length;
@@ -1019,29 +1346,54 @@ export function WorkspaceProvider({ children }) {
       coverImage: newProject.coverImage || null,
       coverImagePosition: newProject.coverImagePosition ?? 50,
       userId: user?.email || "default",
-      createdAt: newProject.createdAt || formatLocalDateToISO(currentDate)
+      createdAt: newProject.createdAt || formatLocalDateToISO(currentDate),
+      _synced: false
     };
+
+    let syncError = null;
+    if (isCloudUser) {
+      const res = await syncEntityToRemote("projects", item, user.id);
+      if (!res.success) {
+        syncError = res.error;
+        item._synced = false;
+      } else {
+        item._synced = true;
+      }
+    }
+
     setProjects((prev) => [item, ...prev]);
 
-    setActivityFeed((prev) => [
-      {
-        id: "act-" + Date.now(),
-        typeKey: "projectCreated",
-        itemTitle: newProject.title,
-        type: language === "id" ? "Proyek Baru" : "New Project",
-        description: language === "id" ? `Proyek dibuat: "${newProject.title}"` : `Project created: "${newProject.title}"`,
-        time: language === "id" ? "Baru saja" : "Just now",
-        date: formatLocalDateToISO(currentDate),
-        color: "bg-secondary"
-      },
-      ...prev
-    ]);
+    if (syncError) {
+      showToast(
+        language === "id"
+          ? `Tersimpan secara lokal. Gagal sinkron ke cloud: ${syncError}`
+          : `Saved locally. Failed to sync to cloud: ${syncError}`,
+        "error"
+      );
+    }
+
+    const actItem = {
+      id: "act-" + Date.now(),
+      typeKey: "projectCreated",
+      itemTitle: newProject.title,
+      type: language === "id" ? "Proyek Baru" : "New Project",
+      description: language === "id" ? `Proyek dibuat: "${newProject.title}"` : `Project created: "${newProject.title}"`,
+      time: language === "id" ? "Baru saja" : "Just now",
+      date: formatLocalDateToISO(currentDate),
+      color: "bg-secondary"
+    };
+
+    if (isCloudUser) {
+      syncEntityToRemote("activity_feed", actItem, user.id).catch(console.warn);
+    }
+    setActivityFeed((prev) => [actItem, ...prev]);
 
     showToast(language === "id" ? `✓ Proyek "${newProject.title}" berhasil dibuat!` : `✓ Project "${newProject.title}" created successfully!`);
     return item;
   };
 
   const updateProject = (projectId, updates) => {
+    let updatedProject = null;
     setProjects((prev) =>
       prev.map((p) => {
         if (p.id === projectId || p.key === projectId) {
@@ -1049,16 +1401,40 @@ export function WorkspaceProvider({ children }) {
           const pTasks = tasks.filter(
             (t) => t.projectId === p.id || (p.key && t.projectId === p.key) || t.project === p.title
           );
-          return recalculateProjectMetrics(merged, pTasks);
+          const recalculated = recalculateProjectMetrics(merged, pTasks);
+          updatedProject = recalculated;
+          return recalculated;
         }
         return p;
       })
     );
+
+    if (isCloudUser && updatedProject) {
+      debouncedSyncEntityToRemote("projects", updatedProject, user.id, 400, (err) => {
+        showToast(language === "id" ? `Gagal memperbarui proyek: ${err}` : `Failed to update project: ${err}`, "error");
+      });
+    }
+
     showToast(language === "id" ? "✓ Proyek berhasil diperbarui!" : "✓ Project updated successfully!");
   };
 
-  const deleteProject = (projectId) => {
+  const deleteProject = async (projectId) => {
     const target = projects.find((p) => p.id === projectId || p.key === projectId);
+    if (isCloudUser) {
+      const res = await deleteEntityFromRemote("projects", projectId, user.id);
+      if (!res.success) {
+        showToast(
+          language === "id" ? `Gagal menghapus proyek dari cloud: ${res.error}` : `Failed to delete project from cloud: ${res.error}`,
+          "error"
+        );
+        return false;
+      }
+      const notesToRemove = notes.filter((n) => n.projectId === projectId || (target?.key && n.projectId === target.key));
+      for (const note of notesToRemove) {
+        deleteEntityFromRemote("notes", note.id, user.id).catch(console.warn);
+      }
+    }
+
     setProjects((prev) => prev.filter((p) => p.id !== projectId && p.key !== projectId));
     // Remove notes associated with this project so data stays clean
     setNotes((prev) => prev.filter((n) => n.projectId !== projectId && (target?.key ? n.projectId !== target.key : true)));
@@ -1066,15 +1442,23 @@ export function WorkspaceProvider({ children }) {
       setProjectModalState({ isOpen: false, projectKey: "ignos" });
     }
     if (target?.title) {
+      if (isCloudUser) {
+        const actToRemove = activityFeed.find((a) => a.itemTitle === target.title);
+        if (actToRemove?.id) {
+          deleteEntityFromRemote("activity_feed", actToRemove.id, user.id).catch(console.warn);
+        }
+      }
       setActivityFeed((prev) => prev.filter((a) => a.itemTitle !== target.title));
     }
     showToast(language === "id" ? `✓ Proyek "${target?.title || ''}" telah dihapus` : `✓ Project "${target?.title || ''}" deleted`, "info");
+    return true;
   };
 
   const toggleProjectMilestone = (projectId, milestoneId) => {
     let affectedMilestoneTitle = "";
     let willBeCompleted = false;
     const todayISO = formatLocalDateToISO(currentDate);
+    let updatedProject = null;
 
     setProjects((prev) =>
       prev.map((p) => {
@@ -1117,35 +1501,42 @@ export function WorkspaceProvider({ children }) {
             ? "completed"
             : (p.status === "completed" && newProgress < 100 ? "in-progress" : (newProgress > 0 && p.status === "planning" ? "in-progress" : p.status));
 
-          return {
+          const res = {
             ...p,
             milestones: updatedMilestones,
             progress: newProgress,
             status: newStatus,
             statusLabel: newStatus === "completed" ? "Completed" : (newStatus === "planning" ? "Planning" : "In Progress")
           };
+          updatedProject = res;
+          return res;
         }
         return p;
       })
     );
 
+    if (isCloudUser && updatedProject) {
+      syncEntityToRemote("projects", updatedProject, user.id).catch(console.warn);
+    }
+
     if (affectedMilestoneTitle) {
       if (willBeCompleted) {
-        setActivityFeed((prev) => [
-          {
-            id: "act-" + Date.now(),
-            typeKey: "projectMilestoneCompleted",
-            itemTitle: affectedMilestoneTitle,
-            type: language === "id" ? "Milestone Proyek Selesai" : "Project Milestone Completed",
-            description: language === "id"
-              ? `Menyelesaikan milestone: "${affectedMilestoneTitle}"`
-              : `Completed milestone: "${affectedMilestoneTitle}"`,
-            time: language === "id" ? "Baru saja" : "Just now",
-            date: todayISO,
-            color: "bg-tertiary"
-          },
-          ...prev
-        ]);
+        const actItem = {
+          id: "act-" + Date.now(),
+          typeKey: "projectMilestoneCompleted",
+          itemTitle: affectedMilestoneTitle,
+          type: language === "id" ? "Milestone Proyek Selesai" : "Project Milestone Completed",
+          description: language === "id"
+            ? `Menyelesaikan milestone: "${affectedMilestoneTitle}"`
+            : `Completed milestone: "${affectedMilestoneTitle}"`,
+          time: language === "id" ? "Baru saja" : "Just now",
+          date: todayISO,
+          color: "bg-tertiary"
+        };
+        if (isCloudUser) {
+          syncEntityToRemote("activity_feed", actItem, user.id).catch(console.warn);
+        }
+        setActivityFeed((prev) => [actItem, ...prev]);
         showToast(language === "id" ? `✓ Milestone "${affectedMilestoneTitle}" selesai!` : `✓ Milestone "${affectedMilestoneTitle}" completed!`);
       } else {
         setActivityFeed((prev) =>
@@ -1164,6 +1555,7 @@ export function WorkspaceProvider({ children }) {
       completed: false
     };
 
+    let updatedProject = null;
     setProjects((prev) =>
       prev.map((p) => {
         if (p.id === projectId || p.key === projectId) {
@@ -1190,21 +1582,28 @@ export function WorkspaceProvider({ children }) {
             newProgress = Math.round((completedTasks / totalTasks) * 100);
           }
 
-          return {
+          const res = {
             ...p,
             milestones: updatedMilestones,
             progress: newProgress,
             status: newProgress === 100 ? "completed" : (p.status === "completed" ? "in-progress" : p.status)
           };
+          updatedProject = res;
+          return res;
         }
         return p;
       })
     );
+
+    if (isCloudUser && updatedProject) {
+      syncEntityToRemote("projects", updatedProject, user.id).catch(console.warn);
+    }
     showToast(language === "id" ? `✓ Milestone "${title.trim()}" ditambahkan!` : `✓ Milestone "${title.trim()}" added!`);
   };
 
   const deleteProjectMilestone = (projectId, milestoneId) => {
     let deletedTitle = "";
+    let updatedProject = null;
     setProjects((prev) =>
       prev.map((p) => {
         if (p.id === projectId || p.key === projectId) {
@@ -1233,21 +1632,27 @@ export function WorkspaceProvider({ children }) {
             newProgress = Math.round((completedTasks / totalTasks) * 100);
           }
 
-          return {
+          const res = {
             ...p,
             milestones: updatedMilestones,
             progress: newProgress,
             status: newProgress === 100 ? "completed" : (p.status === "completed" && newProgress < 100 ? "in-progress" : p.status)
           };
+          updatedProject = res;
+          return res;
         }
         return p;
       })
     );
+
+    if (isCloudUser && updatedProject) {
+      syncEntityToRemote("projects", updatedProject, user.id).catch(console.warn);
+    }
     showToast(language === "id" ? `✓ Milestone "${deletedTitle || ''}" dihapus` : `✓ Milestone "${deletedTitle || ''}" deleted`, "info");
   };
 
   // Note actions
-  const addNote = (newNote) => {
+  const addNote = async (newNote) => {
     const item = {
       id: "n-" + Date.now(),
       title: newNote.title,
@@ -1256,24 +1661,73 @@ export function WorkspaceProvider({ children }) {
       project: newNote.project || "",
       userId: user?.email || "default",
       date: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
-      snippet: newNote.snippet || newNote.description || ""
+      snippet: newNote.snippet || newNote.description || "",
+      _synced: false
     };
+
+    let syncError = null;
+    if (isCloudUser) {
+      const res = await syncEntityToRemote("notes", item, user.id);
+      if (!res.success) {
+        syncError = res.error;
+        item._synced = false;
+      } else {
+        item._synced = true;
+      }
+    }
+
     setNotes((prev) => [item, ...prev]);
+
+    if (syncError) {
+      showToast(
+        language === "id"
+          ? `Tersimpan secara lokal. Gagal sinkron ke cloud: ${syncError}`
+          : `Saved locally. Failed to sync to cloud: ${syncError}`,
+        "error"
+      );
+    }
     showToast(language === "id" ? `✓ Catatan "${newNote.title}" berhasil disimpan!` : `✓ Note "${newNote.title}" saved successfully!`);
     return item;
   };
 
   const updateNote = (noteId, updates) => {
+    let updatedNote = null;
     setNotes((prev) =>
-      prev.map((n) => (n.id === noteId ? { ...n, ...updates } : n))
+      prev.map((n) => {
+        if (n.id === noteId) {
+          const merged = { ...n, ...updates };
+          updatedNote = merged;
+          return merged;
+        }
+        return n;
+      })
     );
+
+    if (isCloudUser && updatedNote) {
+      debouncedSyncEntityToRemote("notes", updatedNote, user.id, 400, (err) => {
+        showToast(language === "id" ? `Gagal memperbarui catatan: ${err}` : `Failed to update note: ${err}`, "error");
+      });
+    }
+
     showToast(language === "id" ? "✓ Catatan berhasil diperbarui!" : "✓ Note updated successfully!");
   };
 
-  const deleteNote = (noteId) => {
+  const deleteNote = async (noteId) => {
     const target = notes.find((n) => n.id === noteId);
+    if (isCloudUser) {
+      const res = await deleteEntityFromRemote("notes", noteId, user.id);
+      if (!res.success) {
+        showToast(
+          language === "id" ? `Gagal menghapus catatan dari cloud: ${res.error}` : `Failed to delete note from cloud: ${res.error}`,
+          "error"
+        );
+        return false;
+      }
+    }
+
     setNotes((prev) => prev.filter((n) => n.id !== noteId));
     showToast(language === "id" ? `✓ Catatan "${target?.title || ''}" telah dihapus` : `✓ Note "${target?.title || ''}" deleted`, "info");
+    return true;
   };
 
   // Open modals helper
@@ -1331,6 +1785,7 @@ export function WorkspaceProvider({ children }) {
         localStorage.setItem("ignos_user", JSON.stringify(sessionUser));
         const guestData = checkGuestDataForMigration();
         if (guestData) setPendingMigrationData(guestData);
+        await loadAndSyncRemoteData(sessionUser.id, true);
         return { success: true, user: sessionUser };
       }
     }
@@ -1381,6 +1836,7 @@ export function WorkspaceProvider({ children }) {
         localStorage.setItem("ignos_user", JSON.stringify(sessionUser));
         const guestData = checkGuestDataForMigration();
         if (guestData) setPendingMigrationData(guestData);
+        await loadAndSyncRemoteData(sessionUser.id, true);
         return { success: true, user: sessionUser };
       }
     }
@@ -1514,11 +1970,12 @@ export function WorkspaceProvider({ children }) {
         if (guestData) {
           setPendingMigrationData((prev) => prev || guestData);
         }
+        await loadAndSyncRemoteData(data.session.user.id, true);
       }
     } catch (e) {
       console.warn("Error reloading user session:", e);
     }
-  }, [applySessionUser, checkGuestDataForMigration]);
+  }, [applySessionUser, checkGuestDataForMigration, loadAndSyncRemoteData]);
 
   const value = {
     language,
