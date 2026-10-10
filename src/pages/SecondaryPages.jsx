@@ -1088,50 +1088,16 @@ export function SettingsPage() {
           <p className="text-body-sm text-on-surface-variant mb-4">
             {t("settings.profileDesc")}
           </p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-space-md">
-            <div>
-              <label className="block text-label-md font-semibold text-on-surface mb-1">
-                {t("settings.displayName")}
-              </label>
-              <input
-                type="text"
-                value={displayName}
-                onChange={(e) => setDisplayName(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg bg-surface-container-low text-on-surface text-body-md focus:outline-none focus:ring-1 focus:ring-primary"
-              />
-            </div>
-            <div>
-              <label className="block text-label-md font-semibold text-on-surface mb-1">
-                {t("settings.role")}
-              </label>
-              <input
-                type="text"
-                value={t("sidebar.adminUser")}
-                readOnly
-                className="w-full px-3 py-2 rounded-lg bg-surface-container-low text-on-surface-variant text-body-md"
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Workspace Theme & Tokens */}
-        <div className="pt-space-md border-t border-surface-container">
-          <h3 className="font-headline-md text-headline-md text-on-surface mb-1">
-            {t("settings.themeSection")}
-          </h3>
-          <p className="text-body-sm text-on-surface-variant mb-4">
-            {t("settings.themeDesc")}
-          </p>
-          <div className="flex flex-wrap items-center gap-space-sm">
-            <span className="px-3 py-1.5 rounded-lg bg-primary text-on-primary text-label-md font-medium shadow-xs">
-              {t("settings.themeTokens.primary")}
-            </span>
-            <span className="px-3 py-1.5 rounded-lg bg-secondary-container text-primary text-label-md font-medium shadow-xs">
-              {t("settings.themeTokens.secondary")}
-            </span>
-            <span className="px-3 py-1.5 rounded-lg bg-surface-container text-tertiary text-label-md font-medium shadow-xs">
-              {t("settings.themeTokens.tertiary")}
-            </span>
+          <div className="max-w-md">
+            <label className="block text-label-md font-semibold text-on-surface mb-1">
+              {t("settings.displayName")}
+            </label>
+            <input
+              type="text"
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              className="w-full px-3 py-2 rounded-lg bg-surface-container-low text-on-surface text-body-md focus:outline-none focus:ring-1 focus:ring-primary"
+            />
           </div>
         </div>
 
