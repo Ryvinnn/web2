@@ -32,6 +32,7 @@ export default function CreateModal() {
   const [showUrlInput, setShowUrlInput] = useState(false);
   const [customUrl, setCustomUrl] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [milestonesList, setMilestonesList] = useState([]);
 
   // Handle Escape key to close modal
@@ -192,120 +193,130 @@ export default function CreateModal() {
     setMilestonesList((prev) => prev.filter((m) => m.id !== id));
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!title.trim()) {
       setErrorMessage(language === "id" ? "Judul wajib diisi" : "Title is required");
       return;
     }
 
-    if (type === "goal") {
-      const validMilestones = milestonesList.filter((m) => m.title.trim()).map((m) => ({
-        id: typeof m.id === "string" ? m.id : "m-" + m.id,
-        title: m.title.trim(),
-        completed: !!m.completed,
-        statusText: m.completed ? (language === "id" ? "Selesai" : "Completed") : `Due ${deadline} • Planned`
-      }));
-      const completedCount = validMilestones.filter((m) => m.completed).length;
-      const progress = validMilestones.length > 0 ? Math.round((completedCount / validMilestones.length) * 100) : (isEditing ? (initialData.progress || 0) : 0);
+    setIsSubmitting(true);
+    setErrorMessage("");
 
-      const catLabel =
-        category === "career"
-          ? (language === "id" ? "Karier & Teknologi" : "Career & Tech")
-          : category === "learning"
-          ? (language === "id" ? "Pembelajaran" : "Learning")
-          : category === "health"
-          ? (language === "id" ? "Kesehatan & Kebugaran" : "Health & Fitness")
-          : (language === "id" ? "Pribadi" : "Personal");
-
-      const deadlineDate = new Date(deadline);
-      const deadlineFormatted = !isNaN(deadlineDate.getTime())
-        ? deadlineDate.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
-        : deadline;
-
-      const goalPayload = {
-        title: title.trim(),
-        description: description.trim(),
-        category,
-        categoryLabel: catLabel,
-        priority,
-        deadline,
-        deadlineFormatted,
-        status: progress === 100 ? "completed" : "in_progress",
-        progress,
-        milestones: validMilestones
-      };
-
-      if (isEditing) {
-        updateGoal(initialData.id, goalPayload);
-      } else {
-        addGoal(goalPayload);
-      }
-    } else if (type === "project") {
-      const deadlineDate = new Date(deadline);
-      const deadlineFormatted = !isNaN(deadlineDate.getTime())
-        ? deadlineDate.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
-        : (deadline || "Nov 2026");
-
-      const validMilestones = milestonesList
-        .filter((m) => m.title && m.title.trim())
-        .map((m, idx) => ({
-          id: m.id ? String(m.id) : "pm-" + Date.now() + "-" + idx,
+    try {
+      if (type === "goal") {
+        const validMilestones = milestonesList.filter((m) => m.title.trim()).map((m) => ({
+          id: typeof m.id === "string" ? m.id : "m-" + m.id,
           title: m.title.trim(),
           completed: !!m.completed,
-          completedAt: m.completed ? formatLocalDateToISO(new Date()) : null
+          statusText: m.completed ? (language === "id" ? "Selesai" : "Completed") : `Due ${deadline} • Planned`
         }));
+        const completedCount = validMilestones.filter((m) => m.completed).length;
+        const progress = validMilestones.length > 0 ? Math.round((completedCount / validMilestones.length) * 100) : (isEditing ? (initialData.progress || 0) : 0);
 
-      const projectPayload = {
-        title: title.trim(),
-        description: description.trim(),
-        category,
-        deadline: deadlineFormatted,
-        priority,
-        coverImage: coverImage.trim() ? coverImage : null,
-        coverImagePosition: coverImage.trim() ? coverImagePosition : 50,
-        milestones: validMilestones
-      };
+        const catLabel =
+          category === "career"
+            ? (language === "id" ? "Karier & Teknologi" : "Career & Tech")
+            : category === "learning"
+            ? (language === "id" ? "Pembelajaran" : "Learning")
+            : category === "health"
+            ? (language === "id" ? "Kesehatan & Kebugaran" : "Health & Fitness")
+            : (language === "id" ? "Pribadi" : "Personal");
 
-      if (isEditing) {
-        updateProject(initialData.id, projectPayload);
+        const deadlineDate = new Date(deadline);
+        const deadlineFormatted = !isNaN(deadlineDate.getTime())
+          ? deadlineDate.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+          : deadline;
+
+        const goalPayload = {
+          title: title.trim(),
+          description: description.trim(),
+          category,
+          categoryLabel: catLabel,
+          priority,
+          deadline,
+          deadlineFormatted,
+          status: progress === 100 ? "completed" : "in_progress",
+          progress,
+          milestones: validMilestones
+        };
+
+        if (isEditing) {
+          await updateGoal(initialData.id, goalPayload);
+        } else {
+          await addGoal(goalPayload);
+        }
+      } else if (type === "project") {
+        const deadlineDate = new Date(deadline);
+        const deadlineFormatted = !isNaN(deadlineDate.getTime())
+          ? deadlineDate.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+          : (deadline || "Nov 2026");
+
+        const validMilestones = milestonesList
+          .filter((m) => m.title && m.title.trim())
+          .map((m, idx) => ({
+            id: m.id ? String(m.id) : "pm-" + Date.now() + "-" + idx,
+            title: m.title.trim(),
+            completed: !!m.completed,
+            completedAt: m.completed ? formatLocalDateToISO(new Date()) : null
+          }));
+
+        const projectPayload = {
+          title: title.trim(),
+          description: description.trim(),
+          category,
+          deadline: deadlineFormatted,
+          priority,
+          coverImage: coverImage.trim() ? coverImage : null,
+          coverImagePosition: coverImage.trim() ? coverImagePosition : 50,
+          milestones: validMilestones
+        };
+
+        if (isEditing) {
+          await updateProject(initialData.id, projectPayload);
+        } else {
+          await addProject(projectPayload);
+        }
+      } else if (type === "note") {
+        const notePayload = {
+          title: title.trim(),
+          category,
+          snippet: description.trim(),
+          projectId: initialData?.projectId || "",
+          project: initialData?.project || initialData?.projectTitle || ""
+        };
+
+        if (isEditing) {
+          await updateNote(initialData.id, notePayload);
+        } else {
+          await addNote(notePayload);
+        }
       } else {
-        addProject(projectPayload);
-      }
-    } else if (type === "note") {
-      const notePayload = {
-        title: title.trim(),
-        category,
-        snippet: description.trim(),
-        projectId: initialData?.projectId || "",
-        project: initialData?.project || initialData?.projectTitle || ""
-      };
+        // Task
+        const taskPayload = {
+          title: title.trim(),
+          description: description.trim(),
+          project: category,
+          priority,
+          deadline,
+          timeTag: "Today",
+          status: "today"
+        };
 
-      if (isEditing) {
-        updateNote(initialData.id, notePayload);
-      } else {
-        addNote(notePayload);
+        if (isEditing) {
+          await updateTask(initialData.id, taskPayload);
+        } else {
+          await addTask(taskPayload);
+        }
       }
-    } else {
-      // Task
-      const taskPayload = {
-        title: title.trim(),
-        description: description.trim(),
-        project: category,
-        priority,
-        deadline,
-        timeTag: "Today",
-        status: "today"
-      };
 
-      if (isEditing) {
-        updateTask(initialData.id, taskPayload);
-      } else {
-        addTask(taskPayload);
-      }
+      closeModal();
+    } catch (err) {
+      console.error("[CreateModal] Failed to submit:", err);
+      setErrorMessage(err?.message || (language === "id" ? "Terjadi kesalahan saat menyimpan data." : "Failed to save data."));
+    } finally {
+      setIsSubmitting(false);
     }
-
-    closeModal();
   };
 
   return (
@@ -704,8 +715,16 @@ export default function CreateModal() {
             </button>
             <button
               type="submit"
-              className="px-space-md sm:px-space-lg py-2 rounded-lg bg-primary hover:bg-primary-container text-on-primary font-label-md text-label-md transition-colors shadow-sm font-medium"
+              disabled={isSubmitting}
+              className={`px-space-md sm:px-space-lg py-2 rounded-lg bg-primary hover:bg-primary-container text-on-primary font-label-md text-label-md transition-colors shadow-sm font-medium flex items-center gap-2 ${
+                isSubmitting ? "opacity-75 cursor-not-allowed" : ""
+              }`}
             >
+              {isSubmitting && (
+                <span className="material-symbols-outlined text-[16px] animate-spin">
+                  progress_activity
+                </span>
+              )}
               {isEditing ? (language === "id" ? "Simpan Perubahan" : "Save Changes") : t("createModal.submitBtn")}
             </button>
           </div>
