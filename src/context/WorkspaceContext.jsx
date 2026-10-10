@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from "react";
+import React, { createContext, useContext, useState, useEffect, useMemo, useCallback, useRef } from "react";
 import {
   initialGoals,
   initialProjects,
@@ -24,7 +24,7 @@ const WorkspaceContext = createContext(null);
 
 // Storage key helpers for user-scoped persistence
 function getUserStorageKey(baseKey, userObj) {
-  const userIdentifier = userObj?.id || userObj?.email;
+  const userIdentifier = typeof userObj === "string" ? userObj : (userObj?.id || userObj?.email);
   if (!userIdentifier) {
     // Isolated guest storage key
     return `ignos_guest_${baseKey.replace("ignos_", "")}`;
@@ -229,6 +229,37 @@ export function WorkspaceProvider({ children }) {
     return t(`dashboard.greetings.${period}`, { user: targetUser });
   };
 
+  // Memoized helper to safely apply session user without causing cascading re-renders when data has not changed
+  const applySessionUser = useCallback((rawUser) => {
+    if (!rawUser) {
+      setUser((prev) => {
+        if (prev === null) return prev;
+        localStorage.removeItem("ignos_user");
+        return null;
+      });
+      return;
+    }
+    const sessionUser = {
+      id: rawUser.id,
+      email: rawUser.email,
+      name: rawUser.user_metadata?.name || rawUser.user_metadata?.full_name || rawUser.email?.split("@")[0] || "",
+      initials: (rawUser.user_metadata?.name || rawUser.email || "AU").slice(0, 2).toUpperCase()
+    };
+    setUser((prev) => {
+      if (
+        prev &&
+        prev.id === sessionUser.id &&
+        prev.email === sessionUser.email &&
+        prev.name === sessionUser.name &&
+        prev.initials === sessionUser.initials
+      ) {
+        return prev;
+      }
+      localStorage.setItem("ignos_user", JSON.stringify(sessionUser));
+      return sessionUser;
+    });
+  }, []);
+
   // Load state from localStorage with user scoping, defaulting to empty collections for new visitors
   const [goals, setGoals] = useState(() => loadCollection("ignos_goals", user));
   const [projects, setProjects] = useState(() => loadCollection("ignos_projects", user));
@@ -236,18 +267,24 @@ export function WorkspaceProvider({ children }) {
   const [notes, setNotes] = useState(() => loadCollection("ignos_notes", user));
   const [activityFeed, setActivityFeed] = useState(() => loadCollection("ignos_activity_feed", user));
 
-  // Reload collections if user changes (logging in, logging out, switching accounts)
+  // Reload collections ONLY if user ID actually changes (logging in, logging out, switching accounts)
+  // Prevents wiping in-memory state or thrashing collections when user name is updated
+  const currentUserId = user?.id;
   useEffect(() => {
-    setGoals(loadCollection("ignos_goals", user));
-    setProjects(loadCollection("ignos_projects", user));
-    setTasks(loadCollection("ignos_tasks", user));
-    setNotes(loadCollection("ignos_notes", user));
-    setActivityFeed(loadCollection("ignos_activity_feed", user));
-  }, [user]);
+    setGoals(loadCollection("ignos_goals", currentUserId));
+    setProjects(loadCollection("ignos_projects", currentUserId));
+    setTasks(loadCollection("ignos_tasks", currentUserId));
+    setNotes(loadCollection("ignos_notes", currentUserId));
+    setActivityFeed(loadCollection("ignos_activity_feed", currentUserId));
+  }, [currentUserId]);
 
-  // Sync Supabase remote data if user is logged in
+  // Sync Supabase remote data if user is logged in (guarded to run once per unique session user ID)
+  const lastFetchedUserIdRef = useRef(null);
   useEffect(() => {
     if (user?.id && isSupabaseConfigured()) {
+      if (lastFetchedUserIdRef.current === user.id) return;
+      lastFetchedUserIdRef.current = user.id;
+
       fetchUserRemoteData(user.id).then((remote) => {
         if (remote) {
           if (remote.goals.length > 0) setGoals(remote.goals);
@@ -257,48 +294,33 @@ export function WorkspaceProvider({ children }) {
           if (remote.activityFeed.length > 0) setActivityFeed(remote.activityFeed);
         }
       });
+    } else if (!user?.id) {
+      lastFetchedUserIdRef.current = null;
     }
   }, [user?.id]);
 
-  // Listen to Supabase auth session changes
+  // Listen to Supabase auth session changes cleanly without redundant state updates
   useEffect(() => {
     if (!isSupabaseConfigured() || !supabase) return;
 
     supabase.auth.getSession().then(({ data }) => {
       if (data?.session?.user) {
-        const u = data.session.user;
-        const sessionUser = {
-          id: u.id,
-          email: u.email,
-          name: u.user_metadata?.name || u.user_metadata?.full_name || u.email.split("@")[0],
-          initials: (u.user_metadata?.name || u.email).slice(0, 2).toUpperCase()
-        };
-        setUser(sessionUser);
-        localStorage.setItem("ignos_user", JSON.stringify(sessionUser));
+        applySessionUser(data.session.user);
       }
     });
 
     const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === "SIGNED_IN" && session?.user) {
-        const u = session.user;
-        const sessionUser = {
-          id: u.id,
-          email: u.email,
-          name: u.user_metadata?.name || u.user_metadata?.full_name || u.email.split("@")[0],
-          initials: (u.user_metadata?.name || u.email).slice(0, 2).toUpperCase()
-        };
-        setUser(sessionUser);
-        localStorage.setItem("ignos_user", JSON.stringify(sessionUser));
+        applySessionUser(session.user);
       } else if (event === "SIGNED_OUT") {
-        setUser(null);
-        localStorage.removeItem("ignos_user");
+        applySessionUser(null);
       }
     });
 
     return () => {
       authListener?.subscription?.unsubscribe();
     };
-  }, []);
+  }, [applySessionUser]);
 
   // Dynamic "Perlu Perhatian" / "Needs Attention" synchronized with live Projects, Goals, Tasks, and Subtasks
   const needsAttention = useMemo(() => {
@@ -330,12 +352,14 @@ export function WorkspaceProvider({ children }) {
   const [globalSearchModalOpen, setGlobalSearchModalOpen] = useState(false);
   const [toast, setToast] = useState(null); // { message, type: 'success' | 'info' | 'error' }
 
-  const showToast = (message, type = "success") => {
+  const toastTimeoutRef = useRef(null);
+  const showToast = useCallback((message, type = "success") => {
+    if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
     setToast({ message, type });
-    setTimeout(() => {
+    toastTimeoutRef.current = setTimeout(() => {
       setToast(null);
     }, 3500);
-  };
+  }, []);
 
   const toggleSidebar = () => setSidebarOpen((prev) => !prev);
   const closeSidebar = () => setSidebarOpen(false);
@@ -1485,22 +1509,16 @@ export function WorkspaceProvider({ children }) {
     try {
       const { data } = await supabase.auth.getSession();
       if (data?.session?.user) {
-        const u = data.session.user;
-        const sessionUser = {
-          id: u.id,
-          email: u.email,
-          name: u.user_metadata?.name || u.user_metadata?.full_name || u.email.split("@")[0],
-          initials: (u.user_metadata?.name || u.email).slice(0, 2).toUpperCase()
-        };
-        setUser(sessionUser);
-        localStorage.setItem("ignos_user", JSON.stringify(sessionUser));
+        applySessionUser(data.session.user);
         const guestData = checkGuestDataForMigration();
-        if (guestData) setPendingMigrationData(guestData);
+        if (guestData) {
+          setPendingMigrationData((prev) => prev || guestData);
+        }
       }
     } catch (e) {
       console.warn("Error reloading user session:", e);
     }
-  }, [checkGuestDataForMigration]);
+  }, [applySessionUser, checkGuestDataForMigration]);
 
   const value = {
     language,
