@@ -731,8 +731,9 @@ export function WorkspaceProvider({ children }) {
     };
 
     let syncError = null;
-    if (isCloudUser) {
-      const res = await syncEntityToRemote("tasks", item, user.id);
+    const targetUserId = (user?.id && isUuid(user.id)) ? user.id : await getActiveSessionUserId();
+    if (isSupabaseConfigured() && supabase && targetUserId) {
+      const res = await syncEntityToRemote("tasks", item, targetUserId);
       if (!res.success) {
         syncError = res.error;
         item._synced = false;
@@ -751,6 +752,8 @@ export function WorkspaceProvider({ children }) {
           : `Saved locally. Failed to sync to cloud: ${syncError}`,
         "error"
       );
+    } else {
+      showToast(language === "id" ? `✓ Tugas "${newTask.title}" berhasil dibuat!` : `✓ Task "${newTask.title}" created successfully!`);
     }
 
     // Synchronize affected project
@@ -768,8 +771,8 @@ export function WorkspaceProvider({ children }) {
               (t) => t.projectId === p.id || (p.key && t.projectId === p.key) || t.project === p.title
             );
             const recalculated = recalculateProjectMetrics(p, pTasks);
-            if (isCloudUser) {
-              syncEntityToRemote("projects", recalculated, user.id).catch(console.warn);
+            if (targetUserId) {
+              syncEntityToRemote("projects", recalculated, targetUserId).catch(console.warn);
             }
             return recalculated;
           }
@@ -790,12 +793,11 @@ export function WorkspaceProvider({ children }) {
       color: "bg-primary"
     };
 
-    if (isCloudUser) {
-      syncEntityToRemote("activity_feed", actItem, user.id).catch(console.warn);
+    if (isSupabaseConfigured() && supabase && targetUserId) {
+      syncEntityToRemote("activity_feed", actItem, targetUserId).catch(console.warn);
     }
     setActivityFeed((prev) => [actItem, ...prev]);
 
-    showToast(language === "id" ? `✓ Tugas "${newTask.title}" berhasil dibuat!` : `✓ Task "${newTask.title}" created successfully!`);
     return item;
   };
 
@@ -1095,8 +1097,9 @@ export function WorkspaceProvider({ children }) {
     };
 
     let syncError = null;
-    if (isCloudUser) {
-      const res = await syncEntityToRemote("goals", item, user.id);
+    const targetUserId = (user?.id && isUuid(user.id)) ? user.id : await getActiveSessionUserId();
+    if (isSupabaseConfigured() && supabase && targetUserId) {
+      const res = await syncEntityToRemote("goals", item, targetUserId);
       if (!res.success) {
         syncError = res.error;
         item._synced = false;
@@ -1114,6 +1117,8 @@ export function WorkspaceProvider({ children }) {
           : `Saved locally. Failed to sync to cloud: ${syncError}`,
         "error"
       );
+    } else {
+      showToast(language === "id" ? `✓ Target "${newGoal.title}" berhasil dibuat!` : `✓ Goal "${newGoal.title}" created successfully!`);
     }
 
     const actItem = {
@@ -1127,12 +1132,11 @@ export function WorkspaceProvider({ children }) {
       color: "bg-tertiary"
     };
 
-    if (isCloudUser) {
-      syncEntityToRemote("activity_feed", actItem, user.id).catch(console.warn);
+    if (isSupabaseConfigured() && supabase && targetUserId) {
+      syncEntityToRemote("activity_feed", actItem, targetUserId).catch(console.warn);
     }
     setActivityFeed((prev) => [actItem, ...prev]);
 
-    showToast(language === "id" ? `✓ Target "${newGoal.title}" berhasil dibuat!` : `✓ Goal "${newGoal.title}" created successfully!`);
     return item;
   };
 
@@ -1351,8 +1355,9 @@ export function WorkspaceProvider({ children }) {
     };
 
     let syncError = null;
-    if (isCloudUser) {
-      const res = await syncEntityToRemote("projects", item, user.id);
+    const targetUserId = (user?.id && isUuid(user.id)) ? user.id : await getActiveSessionUserId();
+    if (isSupabaseConfigured() && supabase && targetUserId) {
+      const res = await syncEntityToRemote("projects", item, targetUserId);
       if (!res.success) {
         syncError = res.error;
         item._synced = false;
@@ -1370,6 +1375,8 @@ export function WorkspaceProvider({ children }) {
           : `Saved locally. Failed to sync to cloud: ${syncError}`,
         "error"
       );
+    } else {
+      showToast(language === "id" ? `✓ Proyek "${newProject.title}" berhasil dibuat!` : `✓ Project "${newProject.title}" created successfully!`);
     }
 
     const actItem = {
@@ -1383,12 +1390,11 @@ export function WorkspaceProvider({ children }) {
       color: "bg-secondary"
     };
 
-    if (isCloudUser) {
-      syncEntityToRemote("activity_feed", actItem, user.id).catch(console.warn);
+    if (isSupabaseConfigured() && supabase && targetUserId) {
+      syncEntityToRemote("activity_feed", actItem, targetUserId).catch(console.warn);
     }
     setActivityFeed((prev) => [actItem, ...prev]);
 
-    showToast(language === "id" ? `✓ Proyek "${newProject.title}" berhasil dibuat!` : `✓ Project "${newProject.title}" created successfully!`);
     return item;
   };
 
@@ -1666,8 +1672,9 @@ export function WorkspaceProvider({ children }) {
     };
 
     let syncError = null;
-    if (isCloudUser) {
-      const res = await syncEntityToRemote("notes", item, user.id);
+    const targetUserId = (user?.id && isUuid(user.id)) ? user.id : await getActiveSessionUserId();
+    if (isSupabaseConfigured() && supabase && targetUserId) {
+      const res = await syncEntityToRemote("notes", item, targetUserId);
       if (!res.success) {
         syncError = res.error;
         item._synced = false;
@@ -1685,8 +1692,9 @@ export function WorkspaceProvider({ children }) {
           : `Saved locally. Failed to sync to cloud: ${syncError}`,
         "error"
       );
+    } else {
+      showToast(language === "id" ? `✓ Catatan "${newNote.title}" berhasil disimpan!` : `✓ Note "${newNote.title}" saved successfully!`);
     }
-    showToast(language === "id" ? `✓ Catatan "${newNote.title}" berhasil disimpan!` : `✓ Note "${newNote.title}" saved successfully!`);
     return item;
   };
 
