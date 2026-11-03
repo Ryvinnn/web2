@@ -53,6 +53,9 @@ function GlobalToast() {
 }
 
 function Layout() {
+  const { t } = useWorkspace();
+  const currentYear = new Date().getFullYear();
+
   return (
     <div className="min-h-screen bg-surface font-body-md text-on-surface antialiased flex overflow-x-hidden">
       {/* Persistent Left Sidebar (Responsive Drawer) */}
@@ -67,6 +70,21 @@ function Layout() {
         <main className="w-full mt-16 bg-surface px-space-md sm:px-space-xl py-space-md sm:py-space-xl flex-1 max-w-full">
           <Outlet />
         </main>
+
+        {/* Global Footer with Copyright */}
+        <footer className="w-full py-4 px-space-md sm:px-space-xl border-t border-surface-container/60 bg-surface-container-lowest/50 text-center select-none">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-2 max-w-7xl mx-auto text-label-sm text-on-surface-variant">
+            <div className="flex items-center gap-1.5 flex-wrap justify-center">
+              <span>© {currentYear}</span>
+              <strong className="font-semibold text-on-surface">AlvinCreate</strong>
+              <span className="hidden sm:inline">•</span>
+              <span>{t("common.allRightsReserved")}</span>
+            </div>
+            <div className="flex items-center gap-2 text-[11px] text-on-surface-variant/80">
+              <span>Suru Workspace</span>
+            </div>
+          </div>
+        </footer>
       </div>
 
       {/* Global Modals & System Components */}

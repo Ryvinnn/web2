@@ -201,6 +201,13 @@ export default function AppSidebar() {
               </div>
             </div>
           )}
+
+          {/* Copyright Notice */}
+          <div className="pt-2 text-center">
+            <span className="text-[11px] text-on-surface-variant/70 font-medium">
+              © {new Date().getFullYear()} AlvinCreate
+            </span>
+          </div>
         </div>
       </aside>
     </>

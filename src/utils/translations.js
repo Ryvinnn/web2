@@ -39,6 +39,9 @@ export const translations = {
       status: "Status",
       actions: "Aksi",
       noData: "Tidak ada data",
+      copyright: "Hak Cipta © {year} AlvinCreate. Hak Cipta Dilindungi.",
+      copyrightShort: "© {year} AlvinCreate",
+      allRightsReserved: "Seluruh hak cipta dilindungi undang-undang.",
       days: {
         mon: "Sen",
         tue: "Sel",
@@ -167,7 +170,12 @@ export const translations = {
       dataSection: "Manajemen Data & Sampel",
       dataDesc: "Kelola data aktivitas tugas untuk pengujian ruang kerja atau akun baru.",
       clearTasksBtn: "Kosongkan Semua Tugas",
-      resetTasksBtn: "Muat Ulang Data Sampel"
+      resetTasksBtn: "Muat Ulang Data Sampel",
+      aboutSection: "Tentang Aplikasi & Hak Cipta",
+      aboutDesc: "Informasi kepemilikan cipta, lisensi, dan identitas pengembang platform.",
+      copyrightNotice: "Hak Cipta © {year} AlvinCreate. Seluruh hak cipta dilindungi undang-undang.",
+      version: "Versi 1.0.0",
+      creatorLabel: "Dibuat & Dikembangkan oleh"
     },
     projects: {
       tag: "Inisiatif & Proyek",
@@ -648,6 +656,9 @@ export const translations = {
       status: "Status",
       actions: "Actions",
       noData: "No data available",
+      copyright: "Copyright © {year} AlvinCreate. All rights reserved.",
+      copyrightShort: "© {year} AlvinCreate",
+      allRightsReserved: "All rights reserved.",
       days: {
         mon: "Mon",
         tue: "Tue",
@@ -776,7 +787,12 @@ export const translations = {
       dataSection: "Data & Sample Management",
       dataDesc: "Manage task activity data for workspace testing or fresh account simulation.",
       clearTasksBtn: "Clear All Tasks",
-      resetTasksBtn: "Reload Sample Tasks"
+      resetTasksBtn: "Reload Sample Tasks",
+      aboutSection: "About Application & Copyright",
+      aboutDesc: "Platform license, copyright ownership, and developer information.",
+      copyrightNotice: "Copyright © {year} AlvinCreate. All rights reserved.",
+      version: "Version 1.0.0",
+      creatorLabel: "Created & Developed by"
     },
     projects: {
       tag: "Initiatives & Projects",

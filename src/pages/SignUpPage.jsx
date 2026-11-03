@@ -259,7 +259,7 @@ export default function SignUpPage() {
 
       {/* Footer */}
       <div className="w-full text-center text-label-sm text-on-surface-variant">
-        <span>© {new Date().getFullYear()} Suru Workspace • Stitch Personal Productivity</span>
+        <span>© {new Date().getFullYear()} <strong className="font-semibold text-on-surface">AlvinCreate</strong> • {t("common.allRightsReserved")}</span>
       </div>
     </div>
   );

@@ -1206,6 +1206,44 @@ export function SettingsPage() {
           </div>
         </div>
 
+        {/* About Application & Copyright Section */}
+        <div className="pt-space-md border-t border-surface-container">
+          <div className="flex items-center gap-space-sm mb-1">
+            <span className="material-symbols-outlined text-primary text-[22px]">verified</span>
+            <h3 className="font-headline-md text-headline-md text-on-surface">
+              {t("settings.aboutSection")}
+            </h3>
+          </div>
+          <p className="text-body-sm text-on-surface-variant mb-4">
+            {t("settings.aboutDesc")}
+          </p>
+          <div className="p-space-lg rounded-xl bg-surface-container-low border border-surface-container flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-space-md">
+              <div className="w-12 h-12 rounded-xl bg-primary/10 text-primary border border-primary/20 flex items-center justify-center font-bold shadow-xs flex-shrink-0">
+                <span className="material-symbols-outlined text-[26px]">copyright</span>
+              </div>
+              <div className="flex flex-col">
+                <div className="flex items-center gap-2">
+                  <span className="font-headline-sm text-headline-sm text-on-surface font-semibold">
+                    AlvinCreate
+                  </span>
+                  <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[11px] font-semibold">
+                    {t("settings.creatorLabel")}
+                  </span>
+                </div>
+                <span className="text-body-sm text-on-surface-variant mt-0.5">
+                  {t("settings.copyrightNotice", { year: new Date().getFullYear() })}
+                </span>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 self-start sm:self-center">
+              <span className="px-3 py-1 rounded-lg bg-surface-container text-on-surface font-label-sm text-label-sm font-medium border border-surface-container/60">
+                {t("settings.version")}
+              </span>
+            </div>
+          </div>
+        </div>
+
         {isAuthenticated && (
           <div className="pt-space-md border-t border-surface-container flex justify-end">
             <button
